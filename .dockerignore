@@ -1,0 +1,21 @@
+# Only the backend's build inputs belong in the build context.
+**
+!demo/
+!demo/gradlew
+!demo/build.gradle
+!demo/settings.gradle
+!demo/gradle/
+!demo/gradle/**
+!demo/src/
+!demo/src/**
+
+# Keep secrets and generated files out even under allowed directories.
+**/.env
+**/.env.*
+**/*.pem
+**/*.key
+**/*.p12
+**/*.pfx
+**/.DS_Store
+**/build/
+**/.gradle/
