@@ -65,7 +65,7 @@ public class SecurityConfiguration {
 			.authorizeHttpRequests(authorize -> authorize
 				.dispatcherTypeMatchers(DispatcherType.ASYNC, DispatcherType.ERROR).permitAll()
 				.requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-				.requestMatchers(HttpMethod.GET, "/health").permitAll()
+				.requestMatchers(HttpMethod.GET, "/health", "/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs", "/v3/api-docs/**").permitAll()
 				.requestMatchers(HttpMethod.POST, "/api/auth/signup", "/api/auth/login").permitAll()
 				.anyRequest().authenticated())
 			.oauth2ResourceServer(oauth2 -> oauth2

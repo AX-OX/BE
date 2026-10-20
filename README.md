@@ -108,3 +108,14 @@ curl -s localhost:8080/internal/ax/portfolio -H "$H" -H 'Content-Type: applicati
 - `greedyTop3.violations`는 `BUDGET_EXCEEDED`, `MISSING_DEPENDENCY`, `DUPLICATE_PROCESS`를 사용한다. 복수 위반은 모두 반환하고 없으면 `[]`이다.
 - 로그인 실패는 `401 UNAUTHORIZED`와 일반 메시지 `이메일 또는 비밀번호가 올바르지 않습니다.`로 통일한다. 예상하지 못한 서버 오류는 `500 INTERNAL_ERROR`이며 상세 예외는 서버 로그에만 기록한다. 로그인 API는 추후 구현 대상이다.
 - 승인 시각 `decidedAt`은 Spring이 승인 처리 시 서버 시각으로 생성하고 ISO 8601 오프셋 포함 형식으로 표기한다. 표기 시간대 `AX_TIME_ZONE`의 기본값은 `Asia/Seoul`이다. 이 설정은 계산 기준일 `AX_EVALUATION_AS_OF`와 독립적이다. 승인 API는 추후 구현 대상이다.
+
+## Swagger로 API 테스트
+
+서버 실행 후 http://localhost:8080/swagger-ui/index.html 에 접속한다. OpenAPI JSON은 `/v3/api-docs`에서 확인할 수 있다.
+
+1. 우측 상단 **Authorize**에서 `InternalToken`에 실행 시 설정한 `INTERNAL_TOKEN` 값을 입력한다. 로컬 예시는 `local-internal-token`이며 `Bearer` 접두어는 넣지 않는다.
+2. API를 펼쳐 **Try it out**을 누르고 값을 입력한 뒤 **Execute**한다.
+3. 기업 조회는 `companyId=1`, 부서 필터는 `departmentId=103`으로 확인한다. 필터 없이 조회하려면 departmentId를 비운다.
+4. AX/ROI 요청 예시는 `{"processId":207,"solutionId":507}`, 포트폴리오는 `{"companyId":1,"maxItems":3}`이다.
+
+현재 제공되는 9개 API는 조회·계산·상태 확인 용도이며 데이터를 변경하지 않는다. `/health`와 Swagger 문서에는 인증이 필요 없고, `/internal/**`는 기존 내부 토큰 인증을 유지한다. 로그인·승인 API는 아직 구현되지 않았다.
