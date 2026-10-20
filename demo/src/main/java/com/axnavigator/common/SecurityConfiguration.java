@@ -38,7 +38,7 @@ public class SecurityConfiguration {
 			.logout(AbstractHttpConfigurer::disable)
 			.requestCache(AbstractHttpConfigurer::disable)
 			.sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-			.addFilterBefore(new InternalTokenFilter(properties.internalToken()), AnonymousAuthenticationFilter.class)
+			// .addFilterBefore(new InternalTokenFilter(properties.internalToken()), AnonymousAuthenticationFilter.class)
 			.authorizeHttpRequests(authorize -> authorize
 				.dispatcherTypeMatchers(DispatcherType.ASYNC, DispatcherType.ERROR).permitAll()
 				.anyRequest().permitAll())
