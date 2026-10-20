@@ -1,0 +1,26 @@
+name: ax-navigator
+
+services:
+  backend:
+    image: ax-navigator-backend:local
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+      args:
+        RUN_TESTS: "true"
+    env_file:
+      - ../../.env
+    environment:
+      PORT: "${PORT:-8080}"
+      SPRING_PROFILES_ACTIVE: "${SPRING_PROFILES_ACTIVE:-default}"
+    ports:
+      - "127.0.0.1:${BACKEND_HOST_PORT:-8080}:${PORT:-8080}"
+    restart: unless-stopped
+    networks:
+      - application
+    # Inherits the Dockerfile healthcheck against GET /health.
+
+networks:
+  # Future services can join this network and use backend:<PORT> via DNS.
+  application:
+    driver: bridge

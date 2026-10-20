@@ -1,0 +1,65 @@
+# Local environment files at any directory depth; keep examples versioned.
+.env
+.env.*
+!.env.example
+
+# OS and editor files, including those outside demo/.
+.DS_Store
+._*
+Thumbs.db
+.idea/
+.vscode/
+*.iml
+*.iws
+*.ipr
+
+# Runtime logs and JVM diagnostic dumps.
+*.log
+*.hprof
+hs_err_pid*
+replay_pid*
+
+# Local private keys and cloud credential files.
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+.aws/
+.ssh/
+service-account*.json
+*-service-account.json
+
+# Spring Boot / Gradle: preserve the original demo/ scope.
+/demo/**/HELP.md
+/demo/**/.gradle
+/demo/**/build/
+!/demo/gradle/wrapper/gradle-wrapper.jar
+!/demo/**/src/main/**/build/
+!/demo/**/src/test/**/build/
+
+# Spring Tool Suite / Eclipse.
+/demo/**/.apt_generated
+/demo/**/.classpath
+/demo/**/.factorypath
+/demo/**/.project
+/demo/**/.settings
+/demo/**/.springBeans
+/demo/**/.sts4-cache
+/demo/**/bin/
+!/demo/**/src/main/**/bin/
+!/demo/**/src/test/**/bin/
+
+# IntelliJ IDEA; file extensions are covered by the global rules above.
+/demo/**/.idea
+/demo/**/out/
+!/demo/**/src/main/**/out/
+!/demo/**/src/test/**/out/
+
+# NetBeans: these paths were anchored to the demo/ project root.
+/demo/nbproject/private/
+/demo/nbbuild/
+/demo/dist/
+/demo/nbdist/
+/demo/.nb-gradle/
