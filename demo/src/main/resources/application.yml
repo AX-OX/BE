@@ -1,0 +1,43 @@
+spring:
+  application:
+    name: ax-navigator
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/ax}
+    username: ${SPRING_DATASOURCE_USERNAME:ax}
+    password: ${SPRING_DATASOURCE_PASSWORD:}
+  jpa:
+    hibernate:
+      # Validate the existing SQL-managed schema; never create or alter tables.
+      ddl-auto: validate
+    generate-ddl: false
+    open-in-view: false
+  sql:
+    init:
+      mode: never
+
+server:
+  port: ${PORT:8080}
+  address: 0.0.0.0
+
+ax:
+  jwt:
+    secret: ${JWT_SECRET}
+    ttl: ${JWT_TTL:12h}
+  internal-token: ${INTERNAL_TOKEN}
+  agent:
+    base-url: ${AGENT_BASE_URL:}
+    enabled: ${AGENT_ENABLED:false}
+  cors:
+    origin: ${CORS_ORIGIN:http://localhost}
+  docs:
+    dir: ${AX_DOCS_DIR:../db/docs}
+  evaluation:
+    as-of: ${AX_EVALUATION_AS_OF:2026-10-01}
+  default-company-id: 1
+  time-zone: ${AX_TIME_ZONE:Asia/Seoul}
+
+springdoc:
+  swagger-ui:
+    tags-sorter: alpha
+    operations-sorter: alpha
+    default-models-expand-depth: -1

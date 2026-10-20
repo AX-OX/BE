@@ -8,6 +8,11 @@
 !demo/gradle/**
 !demo/src/
 !demo/src/**
+!db/
+!db/init/
+!db/init/**
+!db/docs/
+!db/docs/**
 
 # Keep secrets and generated files out even under allowed directories.
 **/.env

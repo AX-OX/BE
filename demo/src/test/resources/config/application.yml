@@ -1,0 +1,9 @@
+# Test-only overrides for the main application.yml settings.
+ax:
+  jwt:
+    secret: test-jwt-secret-0123456789abcdefghijklmnop
+  internal-token: test-internal-token
+  docs:
+    dir: ../db/docs
+  cors:
+    origin: http://app.example
