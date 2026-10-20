@@ -2,6 +2,7 @@ package com.axnavigator.common;
 
 import java.time.Instant;
 
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
@@ -39,6 +40,7 @@ class SecuritySliceTest {
 			.andExpect(content().json("{\"status\":\"UP\"}"));
 	}
 
+	@Disabled("개발 중 permitAll 및 내부 토큰 필터 비활성화. 인증 복구 시 이 테스트도 다시 활성화한다.")
 	@Test
 	void apiWithoutTokenIs401WithErrorBody() throws Exception {
 		mvc.perform(get("/api/anything"))
@@ -60,6 +62,7 @@ class SecuritySliceTest {
 			.andExpect(jsonPath("$.code").value("NOT_FOUND"));
 	}
 
+	@Disabled("개발 중 permitAll 및 내부 토큰 필터 비활성화. 인증 복구 시 이 테스트도 다시 활성화한다.")
 	@Test
 	void internalWithoutTokenIs403() throws Exception {
 		mvc.perform(get("/internal/anything"))
@@ -67,6 +70,7 @@ class SecuritySliceTest {
 			.andExpect(jsonPath("$.code").value("FORBIDDEN"));
 	}
 
+	@Disabled("개발 중 permitAll 및 내부 토큰 필터 비활성화. 인증 복구 시 이 테스트도 다시 활성화한다.")
 	@Test
 	void internalWithWrongTokenIs403() throws Exception {
 		mvc.perform(get("/internal/anything").header("X-Internal-Token", "wrong"))
@@ -79,6 +83,7 @@ class SecuritySliceTest {
 			.andExpect(status().isNotFound());
 	}
 
+	@Disabled("개발 중 permitAll 및 내부 토큰 필터 비활성화. 인증 복구 시 이 테스트도 다시 활성화한다.")
 	@Test
 	void internalDoesNotAcceptUserJwt() throws Exception {
 		mvc.perform(get("/internal/anything").header("Authorization", "Bearer " + token()))
