@@ -20,6 +20,10 @@ cp .env.example .env
 | `BACKEND_HOST_PORT` | 로컬 공개 포트, 기본 `8080` |
 | `PORT` | Spring 수신 포트, 기본 `8080` |
 | `SPRING_PROFILES_ACTIVE` | Cloud SQL은 `cloudsql`, 직접 TCP/Proxy는 `default` |
+| `JWT_SECRET` | 필수. UTF-8 32바이트 이상 JWT 키 |
+| `JWT_TTL` | 기본 `12h` |
+| `INTERNAL_TOKEN` | 필수. 내부 API 토큰 |
+| `CORS_ORIGIN` | 프론트 Origin, 기본 `http://localhost` |
 | `JAVA_TOOL_OPTIONS` | 선택. JVM 실행 옵션 |
 
 예제는 Cloud SQL Connector용 `jdbc:postgresql:///ax`를 사용한다.
@@ -47,13 +51,14 @@ cd demo
 macOS에서는 필요하면 `export JAVA_HOME=$(/usr/libexec/java_home -v 21)`을
 먼저 실행한다. CI도 같은 Gradle 작업을 실행한다.
 
-테스트에는 H2만 사용한다. `@SpringBootTest`의 테스트 속성이 DB 환경변수보다
-우선하므로 CI·이미지 빌드에 Cloud SQL 비밀번호가 필요하지 않다.
-테스트는 실제 서버를 띄워 무인증 `/health`의 200·JSON 응답, 다른 경로의 401,
-JPA 쿼리와 시작 시 테스트 DB의 `SELECT 1`을 확인한다.
-별도 테스트로 Cloud SQL 프로필 YAML 바인딩과 Connector 클래스 로딩을 확인한다. H2는 `testRuntimeOnly`이며
-실행 JAR에는 포함되지 않는다. 이 결과는 PostgreSQL/Cloud SQL 연결이나
-기존 테이블의 매핑·CRUD 권한 검증을 의미하지 않는다.
+기본 `test`는 integration 태그를 제외하고 계산·보안 슬라이스·Cloud SQL 설정 바인딩을
+검증한다. DB·Docker·Cloud SQL 비밀번호 없이 실행한다. 연결 검사기 자체는 테스트 전용
+H2에서 실제 `SELECT 1`을 실행해 확인한다. H2는 실행 JAR에 포함되지 않는다.
+
+`./gradlew integrationTest`는 Docker가 필요하며 Testcontainers의 PostgreSQL+pgvector와
+`db/init`의 스키마·시드로 최신 애플리케이션 전체를 검증한다. 실제 서버의 `/health`,
+JWT API의 401, 내부 토큰 API의 403, JPA 쿼리 및 시작 쿼리도 이 테스트에서 확인한다.
+이 결과는 운영 Cloud SQL 접속 성공을 의미하지 않는다.
 
 ## Docker 실행
 
@@ -81,13 +86,14 @@ HEALTHCHECK를 Compose가 상속한다. `unhealthy` 상태 자체는 재시작�
 
 ## DB 및 인증 정책
 
-`ddl-auto=none`, `generate-ddl=false`, `spring.sql.init.mode=never`로
-자동 테이블 생성·수정과 초기 SQL 실행을 끈다. 현재 Entity/Repository는 없으며,
-실제 테이블 정의를 확인한 뒤 별도로 매핑해야 한다.
+`ddl-auto=validate`, `generate-ddl=false`, `spring.sql.init.mode=never`로
+자동 테이블 생성·수정과 초기 SQL 실행을 끈다. develop의 Entity/Repository를 사용하며,
+기존 DB 스키마와 매핑이 다르면 검증 단계에서 기동이 실패한다.
 
 애플리케이션 시작 시 별도로 `SELECT 1`을 실행하고 실패하면 시작을 실패시킨다.
 
 `GET /health`는 인증 없이 `{"status":"UP"}`를 반환한다. DB 쿼리를 수행하지
 않으므로 DB 정상 여부를 증명하지 않는다. JPA 초기화에는 DB 연결이 필요하므로
 실행 DB 설정이 없거나 연결할 수 없으면 애플리케이션이 시작되지 않을 수 있다.
-나머지 요청의 인증 요구, HTTP Basic·form login·CSRF 정책은 기존대로 유지한다.
+develop의 JWT Bearer·stateless 인증과 내부 토큰 정책을 유지한다. 인증·Swagger·업무 API의
+상세 정책은 루트 README를 따른다.

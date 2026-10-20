@@ -2,6 +2,9 @@
 # Credentials come from the runtime service account (ADC); no JSON key is needed.
 spring:
   datasource:
+    url: ${SPRING_DATASOURCE_URL}
+    username: ${SPRING_DATASOURCE_USERNAME}
+    password: ${SPRING_DATASOURCE_PASSWORD}
     driver-class-name: org.postgresql.Driver
     hikari:
       data-source-properties:

@@ -6,9 +6,10 @@
 - JPA, PostgreSQL JDBC 드라이버, Java Cloud SQL Connector 1.30.1을 포함한다.
 - `SPRING_PROFILES_ACTIVE=cloudsql`이면 `application-cloudsql.yml`의 SocketFactory로 연결한다.
 - URL·사용자·비밀번호·인스턴스·IP 방식은 환경변수로 받는다. ADC로 실행 계정을 사용한다.
-- `ddl-auto: none`, `generate-ddl: false`, SQL 초기화 `never`로 기존 테이블을 변경하지 않는다.
-- 스키마는 임의 지정하지 않고 DB 사용자의 기존 `search_path`를 사용한다. 테이블 정의를
-  받지 않았으므로 Entity/Repository는 아직 없으며 비즈니스 CRUD 구현과는 구분한다.
+- `ddl-auto: validate`, `generate-ddl: false`, SQL 초기화 `never`로 기존 테이블을 변경하지 않는다.
+- 스키마는 DB 사용자의 기존 `search_path`를 사용한다. develop의 Entity/Repository와
+  업무 기능을 유지하며 기존 SQL 스키마를 검증한다. JWT·Agent·CORS·Swagger 설정도
+  `application.yml`에 통합했다.
 - 시작 시 `DatabaseConnectionVerifier`가 실제 DataSource에서 읽기 전용 `SELECT 1`을
   실행한다. 실패하면 시작이 실패한다. 성공하면 아래 로그를 남긴다.
 
@@ -16,7 +17,7 @@
 Database connectivity verified: SELECT 1 returned 1 (database=PostgreSQL)
 ```
 
-`GET /health`와 기존 HTTP Basic·form login·CSRF·인증 정책은 유지했다.
+`GET /health`와 develop의 JWT Bearer·내부 토큰 인증 정책은 유지했다.
 `/health`는 계속 프로세스 상태만 반환하며 DB 확인 기준으로 사용하지 않는다.
 쿼리는 시작할 때 한 번 실행하므로 이후 DB 가용성의 지속적인 감시를 의미하지 않는다.
 
@@ -65,8 +66,8 @@ ORDER BY schemaname, tablename;
 SELECT pg_has_role(current_user, 'axox_app_rw', 'USAGE');
 ```
 
-현재 `SELECT 1` 연결 검증에는 특정 테이블·스키마가 필요하지 않다. 테이블 매핑을
-추가할 때는 실제 스키마와 CRUD·시퀀스 권한을 별도로 검증한다.
+`SELECT 1` 자체는 테이블을 사용하지 않지만 JPA 시작 시 develop의 테이블 매핑을
+검증한다. 실제 스키마와 CRUD·시퀀스 권한도 확인해야 한다.
 
 ## 2. 콘솔에서 프로젝트 간 IAM·Secret 권한 설정
 
@@ -130,7 +131,7 @@ AXOX_SECRET_NUMBER="$(gcloud projects describe "$AXOX_SECRET_PROJECT" \
 gcloud run deploy "$AXOX_SERVICE" \
   --project=my-project-axox --region="$AXOX_REGION" --source=. \
   --service-account="$AXOX_RUNTIME_SA" \
-  --update-env-vars="SPRING_PROFILES_ACTIVE=cloudsql,SPRING_DATASOURCE_URL=jdbc:postgresql:///ax,SPRING_DATASOURCE_USERNAME=axox_app,INSTANCE_CONNECTION_NAME=axox-db-trial:asia-northeast1:free-trial-first-project,CLOUD_SQL_IP_TYPES=$AXOX_IP_TYPE,SPRING_JPA_HIBERNATE_DDL_AUTO=none,SPRING_JPA_GENERATE_DDL=false,SPRING_SQL_INIT_MODE=never" \
+  --update-env-vars="SPRING_PROFILES_ACTIVE=cloudsql,SPRING_DATASOURCE_URL=jdbc:postgresql:///ax,SPRING_DATASOURCE_USERNAME=axox_app,INSTANCE_CONNECTION_NAME=axox-db-trial:asia-northeast1:free-trial-first-project,CLOUD_SQL_IP_TYPES=$AXOX_IP_TYPE,SPRING_JPA_HIBERNATE_DDL_AUTO=validate,SPRING_JPA_GENERATE_DDL=false,SPRING_SQL_INIT_MODE=never" \
   --update-secrets="SPRING_DATASOURCE_PASSWORD=projects/$AXOX_SECRET_NUMBER/secrets/axox-db-password:$AXOX_SECRET_VERSION"
 ```
 
@@ -159,12 +160,12 @@ Database connectivity verified: SELECT 1 returned 1 (database=PostgreSQL)
 완료 처리하지 않는다. `/health` 200은 연결 검증을 대체하지 않는다.
 
 연결·권한 오류가 있으면 해당 버전의 Connector/JDBC 오류를 확인한다. 성공 로그는
-연결·쿼리 실행을 증명하지만 아직 기존 테이블의 Entity 매핑이나 CRUD를 증명하지 않는다.
+연결·쿼리 실행을 증명하지만 모든 업무 CRUD가 정상임을 증명하지는 않는다.
 
 ## 로컬 검증 결과 (2026-10-20)
 
-Java 21의 `clean test bootJar --no-daemon` 성공. 테스트는 총 5개다.
-H2에서 JPA 쿼리·시작 시 SELECT 1·기존 HTTP 인증 동작을 검증하고,
-Cloud SQL YAML 프로필의 바인딩·Connector 클래스 로딩을 별도로 확인한다.
-Cloud SQL 프로필 테스트는 실제 네트워크 연결을 열지 않는다.
-실제 GCP 설정·재배포·Cloud SQL 쿼리 검증은 아직 수행되지 않았다.
+merge 후 검증은 `./demo/gradlew -p demo clean build`로 진행한다.
+기본 테스트는 DB·Docker 없이 계산·인증·Cloud SQL 설정과 H2의 연결 검사기를 검증하고,
+`integrationTest`는 Testcontainers PostgreSQL에서 전체 앱·스키마·쿼리·인증을 검증한다.
+Cloud SQL 설정 테스트는 실제 네트워크 연결을 열지 않는다.
+운영 GCP 설정·재배포·Cloud SQL 쿼리 검증과 구분한다.

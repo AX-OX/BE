@@ -8,6 +8,8 @@ COPY demo/gradle ./gradle
 RUN chmod +x gradlew && ./gradlew --no-daemon --version
 
 COPY demo/src ./src
+# develop's authentication tests read ../db/init from the Gradle project root.
+COPY db/init /db/init
 
 # Run tests by default. Packaging only: --build-arg RUN_TESTS=false.
 ARG RUN_TESTS=true
@@ -27,6 +29,7 @@ RUN command -v curl \
     && useradd --uid 10001 --gid app --no-create-home --shell /usr/sbin/nologin app
 
 COPY --from=build --chown=10001:10001 /workspace/app.jar /app/app.jar
+COPY --chown=10001:10001 db/docs /db/docs
 USER 10001:10001
 
 # Metadata only; application.yml reads PORT (default: 8080).
