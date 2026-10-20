@@ -48,8 +48,8 @@ INTERNAL_TOKEN=local-internal-token \
 
 | 변수 | 필수 | 기본값 | 설명 |
 |---|---|---|---|
-| `SPRING_DATASOURCE_URL` | | `jdbc:postgresql://localhost:5432/ax` | 업무 DB `ax` |
-| `SPRING_DATASOURCE_USERNAME` | | `ax` | |
+| `SPRING_DATASOURCE_URL` | ✓ | 없음 | 업무 DB `ax`; localhost 암묵적 기본값 없음 |
+| `SPRING_DATASOURCE_USERNAME` | ✓ | 없음 | 로컬 `ax`, Cloud SQL `axox_app` |
 | `SPRING_DATASOURCE_PASSWORD` | ✓ | | |
 | `JWT_SECRET` | ✓ | | HS256 키, 32바이트 이상 (짧으면 기동 실패) |
 | `INTERNAL_TOKEN` | ✓ | | `/internal/**`의 `X-Internal-Token` 값 |
@@ -75,6 +75,9 @@ Cloud SQL에서는 `SPRING_PROFILES_ACTIVE=cloudsql`과 다음 값을 런타임�
 | `INSTANCE_CONNECTION_NAME` | `axox-db-trial:asia-northeast1:free-trial-first-project` |
 | `CLOUD_SQL_IP_TYPES` | 확인한 네트워크 방식에 따라 `PUBLIC` 또는 `PRIVATE` |
 
+Cloud Run에서는 `cloudsql` 프로필 및 SocketFactory 설정을 DB 초기화 전에 검증한다.
+프로필이 빠지거나 외부 설정에 의해 Connector가 덮어써지면 localhost로 접속하지 않고
+설정 오류로 시작을 실패시킨다.
 JWT·내부 토큰 설정도 필요하며 실제 비밀값은 코드나 예제에 작성하지 않는다.
 `ddl-auto=validate`, `generate-ddl=false`, SQL 초기화 `never`로 자동 DDL을 막는다.
 `DatabaseConnectionVerifier`는 시작 시 실제 DataSource에서 읽기 전용 `SELECT 1`을

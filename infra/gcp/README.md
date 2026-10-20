@@ -39,6 +39,38 @@ Database connectivity verified: SELECT 1 returned 1 (database=PostgreSQL)
 따라서 실제 배포 대상·실행 계정·Secret 프로젝트·버전은 조회하지 못했으며,
 IAM 변경·배포·Cloud SQL 쿼리 실행도 완료하지 않았다.
 
+## localhost 접속 오류 확인 (2026-10-20)
+
+실제 배포 커밋 `45b5a99e68f55abfab30b02af2878f8f103af2fd`를 origin에서 fetch해
+확인했다. Connector `postgres-socket-factory:1.30.1`과 `application-cloudsql.yml`이
+모두 포함되어 있으며 수정 전 현재 HEAD `c650cb8`과 소스 트리 전체가 같다.
+의존성·프로필 파일 누락이 원인이라는 증거는 없다.
+
+해당 커밋의 `application.yml`에는 DB URL 미설정 시 `localhost:5432` 기본값이 있다.
+또한 `jdbc:postgresql:///ax` 자체도 SocketFactory가 적용되지 않으면 PostgreSQL JDBC의
+기본 호스트인 localhost로 연결한다. 따라서 active profile, 프로필 파일 로딩 및
+컨테이너 args/JVM 옵션/외부 Spring 설정이 실제 revision에서 어떻게 적용되는지 확인해야 한다.
+제공된 환경변수 5개는 Connector 구성과 일치하지만 실제 Cloud Run revision은 접근 권한이
+있는 도구가 없어 직접 조회하지 못했다.
+
+현재 코드는 localhost·사용자·빈 비밀번호 기본값을 제거했다. `K_SERVICE`가 존재하는
+Cloud Run에서 `cloudsql` 프로필이 없거나 SocketFactory 설정이 누락·덮어쓰기되면
+DB 초기화 전에 구체적인 설정 오류로 실패한다. Dialect나 timeout은 바꾸지 않았다.
+
+Cloud Shell에 `apply-cloudsql-env.sh`를 업로드한 뒤 기존 서비스명·리전을 넣어 실행한다.
+
+```sh
+bash apply-cloudsql-env.sh '<기존 서비스 이름>' '<기존 서비스 리전>'
+```
+
+스크립트는 기존 Secret 참조를 확인하고 제공된 환경변수 5개만 `--update-env-vars`로
+적용해 새 revision을 배포한다. JWT·내부 토큰·기존 Secret 참조는 유지한다.
+프로필을 덮어쓸 수 있는 설정이 감지되면 이름만 표시하고 중단하므로 콘솔에서 확인한다.
+Secret 값이나 전체 환경변수를 출력하지 않는다. 새 revision의 `SELECT 1` 성공 로그가
+없으면 연결 성공으로 표시하지 않는다. 로그 수집이 늦으면 콘솔에서 해당 revision을 다시 확인한다.
+현재 배포 이미지에도 Connector가 있으므로 이 작업은 새 코드 이미지 없이 실행 설정을
+수정할 수 있다. 추가한 조기 검증 코드는 다음 소스 빌드·배포부터 적용된다.
+
 ## 1. 콘솔에서 기존 리소스 확인
 
 1. 프로젝트 **my-project-axox** → **Cloud Run → 서비스**에서 기존 백엔드의 이름과
