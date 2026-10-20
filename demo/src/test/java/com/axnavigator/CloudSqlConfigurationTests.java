@@ -1,11 +1,11 @@
 package com.axnavigator;
 
-import com.zaxxer.hikari.HikariConfig;
+import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
-import org.springframework.boot.context.properties.bind.Bindable;
-import org.springframework.boot.context.properties.bind.Binder;
+import org.springframework.boot.autoconfigure.AutoConfigurations;
+import org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration;
 import org.springframework.boot.test.context.ConfigDataApplicationContextInitializer;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 
@@ -15,6 +15,7 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 class CloudSqlConfigurationTests {
 
 	private final ApplicationContextRunner cloudRun = new ApplicationContextRunner()
+		.withConfiguration(AutoConfigurations.of(DataSourceAutoConfiguration.class))
 		.withInitializer(new ConfigDataApplicationContextInitializer())
 		.withUserConfiguration(CloudSqlConfigurationValidation.class)
 		.withPropertyValues(
@@ -36,8 +37,10 @@ class CloudSqlConfigurationTests {
 				assertThat(context).hasNotFailed();
 				assertThat(context.getEnvironment().getProperty("spring.datasource.url"))
 					.isEqualTo("jdbc:postgresql:///ax");
-				HikariConfig config = Binder.get(context.getEnvironment())
-					.bind("spring.datasource.hikari", Bindable.of(HikariConfig.class)).get();
+				HikariDataSource config = context.getBean(HikariDataSource.class);
+				assertThat(config.getJdbcUrl()).isEqualTo("jdbc:postgresql:///ax");
+				assertThat(config.getUsername()).isEqualTo("axox_app");
+				assertThat(config.getDriverClassName()).isEqualTo("org.postgresql.Driver");
 				assertThat(config.getDataSourceProperties())
 					.containsEntry("cloudSqlInstance", "axox-db-trial:asia-northeast1:free-trial-first-project")
 					.containsEntry("ipTypes", ipType)
