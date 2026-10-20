@@ -1,0 +1,19 @@
+spring:
+  application:
+    name: demo
+  datasource:
+    url: ${SPRING_DATASOURCE_URL}
+    username: ${SPRING_DATASOURCE_USERNAME}
+    password: ${SPRING_DATASOURCE_PASSWORD}
+  jpa:
+    hibernate:
+      ddl-auto: none
+    generate-ddl: false
+    open-in-view: false
+  sql:
+    init:
+      mode: never
+
+server:
+  port: ${PORT:8080}
+  address: 0.0.0.0

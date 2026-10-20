@@ -29,7 +29,7 @@ RUN command -v curl \
 COPY --from=build --chown=10001:10001 /workspace/app.jar /app/app.jar
 USER 10001:10001
 
-# Metadata only; application.properties reads PORT (default: 8080).
+# Metadata only; application.yml reads PORT (default: 8080).
 EXPOSE 8080
 HEALTHCHECK --interval=10s --timeout=3s --start-period=20s --retries=3 \
     CMD curl --fail --silent --show-error --max-time 2 --noproxy '*' "http://127.0.0.1:${PORT:-8080}/health" || exit 1
