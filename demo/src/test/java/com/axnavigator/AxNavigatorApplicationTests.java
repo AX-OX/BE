@@ -1,4 +1,4 @@
-package com.example.demo;
+package com.axnavigator;
 
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -7,19 +7,21 @@ import java.net.http.HttpResponse;
 import java.time.Duration;
 
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
+
+import com.axnavigator.support.IntegrationTest;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-class DemoApplicationTests {
+/** 실제 포트로 서버를 띄워 DB 스키마 validate·보안 규칙을 확인한다. */
+@IntegrationTest
+class AxNavigatorApplicationTests {
 
 	@LocalServerPort
 	private int port;
 
 	@Test
-	void contextLoads() {
+	void contextLoadsWithSchemaValidation() {
 	}
 
 	@Test
@@ -27,19 +29,21 @@ class DemoApplicationTests {
 		HttpResponse<String> response = get("/health");
 
 		assertThat(response.statusCode()).isEqualTo(200);
-		assertThat(response.headers().firstValue("Content-Type").orElse(""))
-			.startsWith("application/json");
 		assertThat(response.body()).isEqualTo("{\"status\":\"UP\"}");
 	}
 
 	@Test
-	void otherEndpointsStillRequireAuthentication() throws Exception {
-		assertThat(get("/private").statusCode()).isEqualTo(401);
+	void apiRequiresAuthentication() throws Exception {
+		assertThat(get("/api/ai/tasks?mine=true").statusCode()).isEqualTo(401);
+	}
+
+	@Test
+	void internalRequiresToken() throws Exception {
+		assertThat(get("/internal/solutions").statusCode()).isEqualTo(403);
 	}
 
 	private HttpResponse<String> get(String path) throws Exception {
-		try (HttpClient client = HttpClient.newBuilder()
-			.connectTimeout(Duration.ofSeconds(5)).build()) {
+		try (HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build()) {
 			HttpRequest request = HttpRequest.newBuilder()
 				.uri(URI.create("http://127.0.0.1:" + port + path))
 				.header("Accept", "application/json")

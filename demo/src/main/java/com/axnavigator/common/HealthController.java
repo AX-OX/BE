@@ -1,4 +1,4 @@
-package com.example.demo;
+package com.axnavigator.common;
 
 import java.util.Map;
 
