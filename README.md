@@ -1,7 +1,7 @@
 # AX Navigator AI — Backend
 
 Spring Boot 4.1.1 / Java 21. 코드는 `demo/`(패키지 `com.axnavigator`).
-팀 공통 기준 문서는 [contracts/AX_NAVIGATOR_CONTEXT.md](contracts/AX_NAVIGATOR_CONTEXT.md)이며, 테이블·API·필드명은 이 문서를 따른다.
+팀 공통 기획 문서는 별도로 공유하며 저장소에 포함하지 않는다. 테이블·API·필드명은 팀 합의 계약을 따른다.
 
 ## 폴더
 
@@ -100,3 +100,11 @@ curl -s localhost:8080/internal/ax/portfolio -H "$H" -H 'Content-Type: applicati
 #   evaluatedCombinations 56, validCombinations 39, runnerUp [504, 507, 509] 261.3,
 #   greedyTop3 [507, 508, 504] → BUDGET_EXCEEDED, MISSING_DEPENDENCY
 ```
+
+## API 응답 보완 규칙
+
+- 포트폴리오 최상위 `warnings`는 `[{processId, solutionId, code: "INSUFFICIENT_METRICS", missingMonths: ["2026-08"]}]` 형식이며 경고가 없으면 `[]`이다. 지표 부족 후보는 선정에서 제외하고 다른 후보 계산은 계속한다. `excluded`는 정책상 제외 업무이고, 후보별 `warnings`는 `LOW_STANDARDIZATION` 등의 문자열 배열이다.
+- 지표 API는 최근 3개 완료 월 중 한 달이라도 누락되면 `monthlyAvgCount`, `annualHours`, `weightedHourlyLaborCostKrw`를 `null`로 반환한다. 존재하는 월은 `months`, 누락 월은 `missingMonths`에 유지한다. 정상 집계의 응답 정밀도는 각각 소수 2자리, 소수 2자리, 원 단위이며 HALF_UP을 쓴다. 운영 계산은 반올림 전 값을 사용한다.
+- `greedyTop3.violations`는 `BUDGET_EXCEEDED`, `MISSING_DEPENDENCY`, `DUPLICATE_PROCESS`를 사용한다. 복수 위반은 모두 반환하고 없으면 `[]`이다.
+- 로그인 실패는 `401 UNAUTHORIZED`와 일반 메시지 `이메일 또는 비밀번호가 올바르지 않습니다.`로 통일한다. 예상하지 못한 서버 오류는 `500 INTERNAL_ERROR`이며 상세 예외는 서버 로그에만 기록한다. 로그인 API는 추후 구현 대상이다.
+- 승인 시각 `decidedAt`은 Spring이 승인 처리 시 서버 시각으로 생성하고 ISO 8601 오프셋 포함 형식으로 표기한다. 표기 시간대 `AX_TIME_ZONE`의 기본값은 `Asia/Seoul`이다. 이 설정은 계산 기준일 `AX_EVALUATION_AS_OF`와 독립적이다. 승인 API는 추후 구현 대상이다.

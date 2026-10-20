@@ -2,7 +2,7 @@ package com.axnavigator.common;
 
 import org.springframework.http.HttpStatus;
 
-/** 기준 문서 §7 오류 코드. INVALID_CREDENTIALS는 로그인 실패 전용(§8, 401). */
+/** 공통 API 오류 코드. 로그인 실패와 유효하지 않은 인증은 UNAUTHORIZED로 통일한다. */
 public enum ErrorCode {
 
 	NOT_FOUND(HttpStatus.NOT_FOUND),
@@ -13,8 +13,8 @@ public enum ErrorCode {
 	DUPLICATE_EMAIL(HttpStatus.CONFLICT),
 	INVALID_STATE(HttpStatus.CONFLICT),
 	UNAUTHORIZED(HttpStatus.UNAUTHORIZED),
-	INVALID_CREDENTIALS(HttpStatus.UNAUTHORIZED),
-	FORBIDDEN(HttpStatus.FORBIDDEN);
+	FORBIDDEN(HttpStatus.FORBIDDEN),
+	INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR);
 
 	private final HttpStatus status;
 

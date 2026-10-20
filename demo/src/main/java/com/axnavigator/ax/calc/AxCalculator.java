@@ -45,7 +45,7 @@ public final class AxCalculator {
 
 	public static final String MISSING_DEPENDENCY = "MISSING_DEPENDENCY";
 
-	// 계약 변경 제안: greedyTop3.violations에 DUPLICATE_PROCESS 추가 (같은 업무 후보가 둘 이상일 때)
+	// 같은 업무의 후보가 둘 이상인 단순 상위 조합의 제약 위반 사유.
 	public static final String DUPLICATE_PROCESS = "DUPLICATE_PROCESS";
 
 	/** 나눗셈 정밀도. 중간값은 반올림하지 않고 이 유효 자릿수로만 유지한다. */

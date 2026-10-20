@@ -59,14 +59,16 @@ public final class CalcResults {
 	public record RunnerUp(List<Long> solutionIds, BigDecimal totalAxScore) {
 	}
 
+	/** violations: BUDGET_EXCEEDED, MISSING_DEPENDENCY, DUPLICATE_PROCESS. 복수 위반은 모두, 없으면 빈 배열. */
 	public record GreedyTop(List<Long> solutionIds, BigDecimal totalAxScore, long totalFirstYearTcoKrw,
 			List<String> violations) {
 	}
 
-	/** 후보 단위 경고 (포트폴리오 응답용). 계약 변경 제안: §7 포트폴리오 응답에 warnings 필드 추가. */
+	/** 지표 부족 후보 경고. code는 INSUFFICIENT_METRICS, missingMonths는 누락된 완료 월(yyyy-MM). */
 	public record CandidateWarning(long processId, long solutionId, String code, List<String> missingMonths) {
 	}
 
+	/** warnings는 지표 부족 후보를 알리며 없으면 빈 배열이다. 정책상 제외 업무인 excluded와 구분한다. */
 	public record PortfolioResult(boolean insufficient, long budgetKrw, List<CandidateScore> selected,
 			BigDecimal totalAxScore, long totalFirstYearTcoKrw, long remainingBudgetKrw, int evaluatedCombinations,
 			int validCombinations, List<Exclusion> excluded, RunnerUp runnerUp, GreedyTop greedyTop3,

@@ -74,12 +74,12 @@ public class GlobalExceptionHandler {
 			.body(new ErrorResponse(ErrorCode.VALIDATION_ERROR.name(), message, hint));
 	}
 
-	// 계약 변경 제안: 예상하지 못한 서버 오류는 500 INTERNAL_ERROR (§7 코드 목록에 없음)
+	// 예상하지 못한 오류의 상세 정보는 로그에만 기록한다.
 	@ExceptionHandler(Exception.class)
 	ResponseEntity<ErrorResponse> handleUnexpected(Exception ex) {
 		log.error("Unhandled exception", ex);
-		return ResponseEntity.internalServerError()
-			.body(new ErrorResponse("INTERNAL_ERROR", "서버 내부 오류", Map.of()));
+		return ResponseEntity.status(ErrorCode.INTERNAL_ERROR.status())
+			.body(new ErrorResponse(ErrorCode.INTERNAL_ERROR.name(), "서버 내부 오류", Map.of()));
 	}
 
 }

@@ -42,8 +42,9 @@ public final class CompanyDtos {
 
 	/**
 	 * 업무별 최근 3개 완료 월 지표와 집계값 (집계는 계산 모듈 재사용).
-	 * 계약 변경 제안: 반올림 자릿수 monthlyAvgCount·annualHours 소수 2자리, weightedHourlyLaborCostKrw 원 단위.
-	 * 계약 변경 제안: 3개월이 다 없으면 집계값은 null이고 missingMonths(["2026-08"])에 빠진 월을 준다.
+	 * 응답에서만 monthlyAvgCount·annualHours는 소수 2자리, weightedHourlyLaborCostKrw는 원 단위로 반올림한다.
+	 * 최근 3개 완료 월 중 한 달이라도 누락되면 집계값은 null이고 missingMonths에 누락 월을 담는다.
+	 * 존재하는 월의 원본 지표는 months에 유지한다. 계산에는 응답의 반올림된 집계값을 사용하지 않는다.
 	 */
 	public record ProcessMetricsResponse(Long processId, String processName, Long departmentId,
 			List<MetricMonth> months, BigDecimal monthlyAvgCount, BigDecimal annualHours,
