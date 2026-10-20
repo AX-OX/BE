@@ -68,7 +68,7 @@ cd demo
 
 ## API
 
-모든 오류는 `{ "code", "message", "hint" }` 형식이다 (기준 문서 §7). 없는 ID는 `404 NOT_FOUND` + `hint.validIds`.
+모든 오류는 `{ "code", "message", "hint" }` 형식이다 (기준 문서 §7). 없는 ID는 `404 NOT_FOUND`이며 내부 기업·업무 조회 오류는 `hint.validIds`를 제공한다.
 
 ### 내부 API (`/internal/**`, `X-Internal-Token` 필수 — 없거나 틀리면 403)
 
@@ -107,7 +107,7 @@ curl -s localhost:8080/internal/ax/portfolio -H "$H" -H 'Content-Type: applicati
 - 지표 API는 최근 3개 완료 월 중 한 달이라도 누락되면 `monthlyAvgCount`, `annualHours`, `weightedHourlyLaborCostKrw`를 `null`로 반환한다. 존재하는 월은 `months`, 누락 월은 `missingMonths`에 유지한다. 정상 집계의 응답 정밀도는 각각 소수 2자리, 소수 2자리, 원 단위이며 HALF_UP을 쓴다. 운영 계산은 반올림 전 값을 사용한다.
 - `greedyTop3.violations`는 `BUDGET_EXCEEDED`, `MISSING_DEPENDENCY`, `DUPLICATE_PROCESS`를 사용한다. 복수 위반은 모두 반환하고 없으면 `[]`이다.
 - 로그인 실패는 `401 UNAUTHORIZED`와 일반 메시지 `이메일 또는 비밀번호가 올바르지 않습니다.`로 통일한다. 예상하지 못한 서버 오류는 `500 INTERNAL_ERROR`이며 상세 예외는 서버 로그에만 기록한다.
-- 승인 시각 `decidedAt`은 Spring이 승인 처리 시 서버 시각으로 생성하고 ISO 8601 오프셋 포함 형식으로 표기한다. 표기 시간대 `AX_TIME_ZONE`의 기본값은 `Asia/Seoul`이다. 이 설정은 계산 기준일 `AX_EVALUATION_AS_OF`와 독립적이다. 승인 API는 추후 구현 대상이다.
+- 승인 시각 `decidedAt`은 Spring이 승인 처리 시 서버 시각으로 생성하고 ISO 8601 오프셋 포함 형식으로 표기한다. 표기 시간대 `AX_TIME_ZONE`의 기본값은 `Asia/Seoul`이다. 이 설정은 계산 기준일 `AX_EVALUATION_AS_OF`와 독립적이다.
 
 ## Swagger로 API 테스트
 
@@ -118,7 +118,7 @@ curl -s localhost:8080/internal/ax/portfolio -H "$H" -H 'Content-Type: applicati
 3. 기업 조회는 `companyId=1`, 부서 필터는 `departmentId=103`으로 확인한다. 필터 없이 조회하려면 departmentId를 비운다.
 4. AX/ROI 요청 예시는 `{"processId":207,"solutionId":507}`, 포트폴리오는 `{"companyId":1,"maxItems":3}`이다.
 
-현재 제공되는 9개 API는 조회·계산·상태 확인 용도이며 데이터를 변경하지 않는다. `/health`와 Swagger 문서에는 인증이 필요 없고, `/internal/**`는 기존 내부 토큰 인증을 유지한다. 회원가입·로그인 API는 아래 인증 안내를 참고한다. 승인 API는 아직 구현되지 않았다.
+조회·계산 API는 데이터를 변경하지 않으며, 회원가입·작업·분석 결과 저장 API는 데이터를 저장한다. `/health`와 Swagger 문서에는 인증이 필요 없고, `/internal/**`는 기존 내부 토큰 인증을 유지한다. 회원가입·로그인 API는 아래 인증 안내를 참고한다. 승인 API는 아래 작업 흐름 안내를 참고한다.
 
 ## 회원가입·로그인 및 JWT
 
@@ -142,4 +142,59 @@ cd demo
 ./gradlew bootRun
 ```
 
-인증·보안 테스트를 포함한 DB 없는 검증은 `./gradlew clean build`, PostgreSQL 시드 로그인·가입 통합 테스트는 `./gradlew integrationTest`로 실행한다(Docker 필요). 작업 API가 아직 없으므로 유효한 JWT로 `/api/ai/tasks`를 호출하면 보안을 통과한 뒤 404, 토큰이 없거나 만료됐으면 401이다.
+인증·보안 테스트를 포함한 DB 없는 검증은 `./gradlew clean build`, PostgreSQL 시드 로그인·가입 통합 테스트는 `./gradlew integrationTest`로 실행한다(Docker 필요). 작업 API는 유효한 JWT로 호출해야 하며, 토큰이 없거나 만료됐으면 401이다.
+
+## 분석 작업·승인·저장 API
+
+### 공개 API (Authorization: Bearer)
+
+| Method | 경로 | 요청 / 응답 |
+|---|---|---|
+| POST | `/api/ai/tasks` | `{requestText}` → 202 `{taskId}` |
+| GET | `/api/ai/tasks/{taskId}` | `{taskId, status, result, traceUrl}` |
+| GET | `/api/ai/tasks?mine=true` | `[{taskId, status, requestText, createdAt, completedAt}]`, 최신순 |
+| GET | `/api/ai/tasks/{taskId}/stream` | `text/event-stream` |
+| POST | `/api/ai/tasks/{taskId}/approval` | `{decision: "APPROVE" 또는 "REJECT", reason?}` → 202 |
+| GET | `/api/docs/{documentId}` | `{documentId, title, docType, accessLevel, version, content}` |
+
+작업 생성의 userId·companyId는 JWT에서 가져오며 요청 본문으로 지정하지 않는다. 조회·SSE·승인은 요청자 본인만 가능하다(다른 사용자 403). 문서는 JWT와 같은 기업의 원문만 제공하며 이메일·전화번호를 마스킹한다. 원문은 `AX_DOCS_DIR/{documentId}.md`에서 읽으며 DB의 fileUri로 임의 경로를 열지 않는다.
+
+### 내부 콜백·저장 API (X-Internal-Token)
+
+| Method | 경로 | 요청 / 응답 |
+|---|---|---|
+| POST | `/internal/tasks/{taskId}/events` | `{type, taskId, ts, node, data}` → 204 |
+| PATCH | `/internal/tasks/{taskId}` | `{status?, result?, errorMessage?, traceUrl?}` → 작업 상태·결과 |
+| POST | `/internal/assessments` | `{taskId, scores: {data, infra, automation, aiCapability, governance}, criteriaVersion, evidence}` → `{assessmentId}` |
+| POST | `/internal/roadmaps` | `{taskId, companyId, assessmentId?, roadmapName, items}` → `{roadmapId, itemIds}` |
+| POST | `/internal/projects` | `{itemId, ownerDepartmentId, projectName}` → `{projectId}` |
+| PATCH | `/internal/projects/{projectId}/status` | `{status}` → `{projectId, projectStatus}` |
+
+- 상태는 `QUEUED → RUNNING → WAITING_APPROVAL → RUNNING → DONE`이며 실패는 FAILED, 사용자 거절은 REJECTED다. 종료 상태를 RUNNING으로 되돌릴 수 없다. 승인 API만 WAITING_APPROVAL에서 RUNNING·REJECTED로 전환할 수 있다.
+- `result`는 JSON 객체이며 Spring은 `approval` 외의 필드를 해석하지 않고 보관한다. PATCH에서 result를 보내면 통째로 교체하지만 기존 approval은 보존하며, 내부 호출자가 넣은 approval은 무시한다. 필드 생략은 기존 값 유지다.
+- APPROVAL_REQUIRED 이벤트는 WAITING_APPROVAL, DONE·FAILED 이벤트는 종료 상태를 DB에도 반영한다. DONE의 data.result 역시 승인 기록을 보존한다. 상태를 먼저 PATCH하고 같은 상태의 이벤트를 보내는 방식도 지원한다.
+- `ts`는 오프셋 포함 ISO 8601 문자열이다. 이벤트의 taskId는 경로와 같아야 하고 data는 JSON 객체다. TOKEN의 data는 `{text}`, TOOL_START/END는 `{tool, label, ok}`, APPROVAL_REQUIRED는 `{roadmap, items, totalAllocatedKrw, budgetKrw}`, DONE은 `{result}`, FAILED는 `{message, traceUrl}`를 사용한다.
+- 성숙도는 5개 영역의 0~100 점수와 `criteriaVersion: "v1.0"`, 근거 배열을 받는다. 누락 시 400과 hint.missingAreas를 반환하며, 총점은 정책 파일의 가중치로 Spring이 계산한다. 영역 부족 시 Agent는 저장하지 않고 부분 점수를 작업 result.maturity에 보관한다.
+- 로드맵 항목은 기존 RoadmapItem camelCase 계약을 따른다. 점수·금액은 `/internal/ax/portfolio`의 selected와 scenarios.base를 그대로 복사한다. `allocatedBudgetKrw=firstYearTcoKrw`, `expectedAnnualSavingKrw=annualSavingKrw`, `threeYearNetValueKrw=threeYearNetKrw`다. 기타 필수 필드는 processId, solutionId, itemName, priorityOrder, phase(SHORT/MID/LONG), startMonth, durationMonths, axScore, impactScore, feasibilityScore, roiPct, rationale, evidence이며 paybackMonths는 null 가능하다.
+- 승인 전 로드맵 등록은 409, 재계산 불일치는 400 CALCULATION_MISMATCH(hint.expected)다. 예산·선행 솔루션·업무 중복을 검증한다. 승인자는 task.userId, 승인 시각은 Spring의 approval.decidedAt, 예산은 등록 시 기업 예산 스냅샷을 사용한다.
+- 같은 taskId의 로드맵, 같은 itemId의 프로젝트 재시도는 기존 ID를 반환한다. DB 잠금으로 동시 승인·등록도 보호한다.
+- 프로젝트는 REGISTERED → IN_PROGRESS → COMPLETED이며 각 상태는 ON_HOLD와 상호 전환할 수 있다. 최초 프로젝트 등록은 APPROVED 로드맵만 가능하다.
+
+### SSE 프론트 연동
+
+`EventSource` 대신 Authorization 헤더를 넣을 수 있는 `fetch`로 구독한다. 이벤트는 `data:`의 한 줄 JSON이고 별도 SSE event 이름을 사용하지 않는다. 프론트는 JSON의 type으로 분기한다. 서버는 15초마다 `: ping` 주석을 전송하고 `X-Accel-Buffering: no`를 설정한다. DONE·FAILED 또는 사용자 거절 시 연결을 닫는다. 이미 종료된 작업에 재연결하면 DONE·FAILED 스냅샷을 보내고 닫으며 REJECTED는 바로 닫는다.
+
+프론트는 45초간 수신이 없으면 재연결하고, 매 재연결 직후 작업 조회 API로 상태를 맞춘다. 이벤트 ID·과거 이벤트 재생은 제공하지 않는다. 스트림은 단일 backend 인스턴스 메모리에서 중계하고, 작업 상태·결과는 DB에 저장한다. Swagger는 SSE 장기 구독보다 작업 조회·승인·내부 콜백 확인 용도로 사용한다.
+
+### Agent 실행 설정 및 검증
+
+`AGENT_ENABLED`는 기본 false다. false에서는 실제 Agent 호출이나 가짜 분석을 수행하지 않고 생성된 작업이 QUEUED로 남는다. 승인 후에도 외부 resume을 호출하지 않는다. 개발 중에는 Swagger에서 내부 PATCH로 RUNNING을 설정한 뒤 이벤트·결과를 보내 화면을 검증할 수 있다.
+
+실제 연결 시 `AGENT_ENABLED=true`, `AGENT_BASE_URL=http://agent:8000`을 설정한다. Spring은 커밋 이후 비동기로 다음을 호출하며 Agent는 202를 반환해야 한다.
+
+- `POST /tasks/{taskId}/run`: `{companyId, userId, requestText}`
+- `POST /tasks/{taskId}/resume`: `{decision, userId, reason}`
+
+호출 시 X-Internal-Token을 전달하고 연결 제한 5초·응답 제한 10초를 적용한다. 전송 실패 시 작업은 FAILED로 저장하고 SSE에 오류를 알린다. 사용자 거절은 resume 실패에도 REJECTED를 유지한다. 자동 재전송 큐·RabbitMQ·프로세스 재시작 시 작업 복구는 이번 범위에 포함하지 않는다.
+
+`./gradlew clean build`는 Docker·DB 없이 단위·슬라이스 테스트를 실행한다. `./gradlew integrationTest`는 격리된 PostgreSQL과 HTTP mock Agent로 전체 흐름, 권한·마스킹, 계산값 변조, 동시 승인·등록, SSE 종료, Agent 장애를 검증한다. 테스트용 mock은 운영 실행에 포함하지 않는다.

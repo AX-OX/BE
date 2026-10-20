@@ -7,6 +7,7 @@ import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.MediaType;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.HttpMediaTypeNotSupportedException;
@@ -27,6 +28,7 @@ public class GlobalExceptionHandler {
 	@ExceptionHandler(ApiException.class)
 	ResponseEntity<ErrorResponse> handleApi(ApiException ex) {
 		return ResponseEntity.status(ex.code().status())
+			.contentType(MediaType.APPLICATION_JSON)
 			.body(new ErrorResponse(ex.code().name(), ex.getMessage(), ex.hint()));
 	}
 
@@ -54,23 +56,27 @@ public class GlobalExceptionHandler {
 	@ExceptionHandler(NoResourceFoundException.class)
 	ResponseEntity<ErrorResponse> handleNoResource(NoResourceFoundException ex) {
 		return ResponseEntity.status(ErrorCode.NOT_FOUND.status())
+			.contentType(MediaType.APPLICATION_JSON)
 			.body(ErrorResponse.of(ErrorCode.NOT_FOUND, "경로 " + ex.getResourcePath() + "는 없다"));
 	}
 
 	@ExceptionHandler(HttpRequestMethodNotSupportedException.class)
 	ResponseEntity<ErrorResponse> handleMethod(HttpRequestMethodNotSupportedException ex) {
 		return ResponseEntity.status(ex.getStatusCode())
+			.contentType(MediaType.APPLICATION_JSON)
 			.body(new ErrorResponse(ErrorCode.VALIDATION_ERROR.name(), "지원하지 않는 메서드: " + ex.getMethod(), Map.of()));
 	}
 
 	@ExceptionHandler(HttpMediaTypeNotSupportedException.class)
 	ResponseEntity<ErrorResponse> handleMediaType(HttpMediaTypeNotSupportedException ex) {
 		return ResponseEntity.status(ex.getStatusCode())
+			.contentType(MediaType.APPLICATION_JSON)
 			.body(new ErrorResponse(ErrorCode.VALIDATION_ERROR.name(), "지원하지 않는 Content-Type", Map.of()));
 	}
 
 	private static ResponseEntity<ErrorResponse> validation(String message, Map<String, Object> hint) {
 		return ResponseEntity.status(ErrorCode.VALIDATION_ERROR.status())
+			.contentType(MediaType.APPLICATION_JSON)
 			.body(new ErrorResponse(ErrorCode.VALIDATION_ERROR.name(), message, hint));
 	}
 
@@ -79,6 +85,7 @@ public class GlobalExceptionHandler {
 	ResponseEntity<ErrorResponse> handleUnexpected(Exception ex) {
 		log.error("Unhandled exception", ex);
 		return ResponseEntity.status(ErrorCode.INTERNAL_ERROR.status())
+			.contentType(MediaType.APPLICATION_JSON)
 			.body(new ErrorResponse(ErrorCode.INTERNAL_ERROR.name(), "서버 내부 오류", Map.of()));
 	}
 
