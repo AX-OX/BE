@@ -38,6 +38,8 @@ class AxNavigatorApplicationTests {
 	void startupVerifiesDatabaseWithAReadOnlyQuery(CapturedOutput output) {
 		assertThat(output.getOut()).contains(
 			"Database connectivity verified: SELECT 1 returned 1 (database=PostgreSQL)");
+		assertThat(output.getOut().indexOf("Database connectivity verified: SELECT 1 returned 1"))
+			.isLessThan(output.getOut().indexOf("Processing PersistenceUnitInfo"));
 	}
 
 	@Test
