@@ -63,3 +63,6 @@ service-account*.json
 /demo/dist/
 /demo/nbdist/
 /demo/.nb-gradle/
+
+# Local planning document (not versioned).
+/contracts/AX_NAVIGATOR_CONTEXT.md
