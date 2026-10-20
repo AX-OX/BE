@@ -3,6 +3,9 @@
 Spring Boot 4.1.1 / Java 21. 코드는 `demo/`(패키지 `com.axnavigator`).
 팀 공통 기획 문서는 별도로 공유하며 저장소에 포함하지 않는다. 테이블·API·필드명은 팀 합의 계약을 따른다.
 
+- [Docker 실행 안내](infra/local/README.md)
+- [Cloud SQL Connector·GCP 배포 안내](infra/gcp/README.md)
+
 ## 폴더
 
 | 경로 | 내용 |
@@ -57,6 +60,25 @@ INTERNAL_TOKEN=local-internal-token \
 | `AX_EVALUATION_AS_OF` | | `2026-10-01` | 계산 기준일 (최근 3개 완료 월 = 2026-07~09) |
 | `AX_TIME_ZONE` | | `Asia/Seoul` | `decidedAt` 등 시각 표기 기준 |
 | `PORT` | | `8080` | |
+
+## Cloud SQL 연결
+
+`application.yml`에 공통·JWT·Agent·Swagger 설정을 통합하고 `application-cloudsql.yml`을
+별도 프로필로 유지한다. PostgreSQL JDBC 및 Java Cloud SQL Connector 1.30.1을 포함한다.
+Cloud SQL에서는 `SPRING_PROFILES_ACTIVE=cloudsql`과 다음 값을 런타임에 주입한다.
+
+| 변수 | 값 |
+|---|---|
+| `SPRING_DATASOURCE_URL` | `jdbc:postgresql:///ax` |
+| `SPRING_DATASOURCE_USERNAME` | `axox_app` |
+| `SPRING_DATASOURCE_PASSWORD` | Secret Manager `axox-db-password`에서 주입 |
+| `INSTANCE_CONNECTION_NAME` | `axox-db-trial:asia-northeast1:free-trial-first-project` |
+| `CLOUD_SQL_IP_TYPES` | 확인한 네트워크 방식에 따라 `PUBLIC` 또는 `PRIVATE` |
+
+JWT·내부 토큰 설정도 필요하며 실제 비밀값은 코드나 예제에 작성하지 않는다.
+`ddl-auto=validate`, `generate-ddl=false`, SQL 초기화 `never`로 자동 DDL을 막는다.
+`DatabaseConnectionVerifier`는 시작 시 실제 DataSource에서 읽기 전용 `SELECT 1`을
+실행하며 실패하면 기동이 실패한다. `/health` 200을 DB 접속 성공으로 간주하지 않는다.
 
 ## 테스트
 

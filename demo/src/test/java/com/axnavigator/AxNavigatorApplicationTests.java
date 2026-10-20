@@ -6,7 +6,12 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 
+import jakarta.persistence.EntityManagerFactory;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.boot.test.web.server.LocalServerPort;
 
 import com.axnavigator.support.IntegrationTest;
@@ -14,14 +19,33 @@ import com.axnavigator.support.IntegrationTest;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /** 실제 포트로 서버를 띄워 DB 스키마 validate·보안 규칙을 확인한다. */
+@ExtendWith(OutputCaptureExtension.class)
 @IntegrationTest
 class AxNavigatorApplicationTests {
 
 	@LocalServerPort
 	private int port;
 
+	@Autowired
+	private EntityManagerFactory entityManagerFactory;
+
 	@Test
 	void contextLoadsWithSchemaValidation() {
+		assertThat(entityManagerFactory.isOpen()).isTrue();
+	}
+
+	@Test
+	void startupVerifiesDatabaseWithAReadOnlyQuery(CapturedOutput output) {
+		assertThat(output.getOut()).contains(
+			"Database connectivity verified: SELECT 1 returned 1 (database=PostgreSQL)");
+	}
+
+	@Test
+	void jpaCanQueryTheTestDatabase() {
+		try (var entityManager = entityManagerFactory.createEntityManager()) {
+			assertThat(((Number) entityManager.createNativeQuery("SELECT 1")
+				.getSingleResult()).intValue()).isEqualTo(1);
+		}
 	}
 
 	@Test
@@ -29,6 +53,8 @@ class AxNavigatorApplicationTests {
 		HttpResponse<String> response = get("/health");
 
 		assertThat(response.statusCode()).isEqualTo(200);
+		assertThat(response.headers().firstValue("Content-Type").orElse(""))
+			.startsWith("application/json");
 		assertThat(response.body()).isEqualTo("{\"status\":\"UP\"}");
 	}
 

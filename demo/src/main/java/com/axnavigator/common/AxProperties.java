@@ -13,7 +13,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
 /**
- * application.properties의 {@code ax.*} 설정. 비밀값(jwt.secret, internal-token)은 환경 변수로만 받는다.
+ * application.yml의 {@code ax.*} 설정. 비밀값(jwt.secret, internal-token)은 환경 변수로만 받는다.
  */
 @Validated
 @ConfigurationProperties(prefix = "ax")
