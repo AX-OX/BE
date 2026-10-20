@@ -41,7 +41,7 @@ public class SecurityConfiguration {
 			.addFilterBefore(new InternalTokenFilter(properties.internalToken()), AnonymousAuthenticationFilter.class)
 			.authorizeHttpRequests(authorize -> authorize
 				.dispatcherTypeMatchers(DispatcherType.ASYNC, DispatcherType.ERROR).permitAll()
-				.anyRequest().hasRole("INTERNAL"))
+				.anyRequest().permitAll())
 			.exceptionHandling(ex -> ex
 				.authenticationEntryPoint((request, response, e) -> JsonErrorWriter.write(response,
 						ErrorCode.FORBIDDEN, "내부 토큰이 없거나 올바르지 않다"))
@@ -67,7 +67,7 @@ public class SecurityConfiguration {
 				.requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
 				.requestMatchers(HttpMethod.GET, "/health", "/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs", "/v3/api-docs/**").permitAll()
 				.requestMatchers(HttpMethod.POST, "/api/auth/signup", "/api/auth/login").permitAll()
-				.anyRequest().authenticated())
+				.anyRequest().permitAll())
 			.oauth2ResourceServer(oauth2 -> oauth2
 				.jwt(Customizer.withDefaults())
 				.authenticationEntryPoint((request, response, e) -> JsonErrorWriter.write(response,
