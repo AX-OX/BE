@@ -29,6 +29,11 @@ public record AxProperties(
 
 	public record Jwt(@NotBlank String secret, @NotNull Duration ttl) {
 
+		@AssertTrue(message = "JWT 만료 시간은 0보다 커야 합니다.")
+		public boolean isTtlPositive() {
+			return ttl != null && !ttl.isNegative() && !ttl.isZero();
+		}
+
 		/** HS256 키는 32바이트 이상이어야 한다. */
 		@AssertTrue(message = "ax.jwt.secret(JWT_SECRET)은 32바이트 이상이어야 한다")
 		public boolean isSecretLongEnough() {

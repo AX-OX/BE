@@ -36,19 +36,19 @@ public class GlobalExceptionHandler {
 		for (FieldError error : ex.getBindingResult().getFieldErrors()) {
 			fields.putIfAbsent(error.getField(), error.getDefaultMessage());
 		}
-		return validation("입력값이 올바르지 않다", Map.of("fields", fields));
+		return validation("입력값이 올바르지 않습니다.", Map.of("fields", fields));
 	}
 
 	@ExceptionHandler(HandlerMethodValidationException.class)
 	ResponseEntity<ErrorResponse> handleInvalidParameter(HandlerMethodValidationException ex) {
 		List<String> messages = ex.getAllErrors().stream().map(e -> e.getDefaultMessage()).toList();
-		return validation("입력값이 올바르지 않다", Map.of("errors", messages));
+		return validation("입력값이 올바르지 않습니다.", Map.of("errors", messages));
 	}
 
 	@ExceptionHandler({ HttpMessageNotReadableException.class, MethodArgumentTypeMismatchException.class,
 			MissingServletRequestParameterException.class })
 	ResponseEntity<ErrorResponse> handleUnreadable(Exception ex) {
-		return validation("요청 형식이 올바르지 않다", Map.of());
+		return validation("요청 형식이 올바르지 않습니다.", Map.of());
 	}
 
 	@ExceptionHandler(NoResourceFoundException.class)

@@ -101,6 +101,24 @@ class SecuritySliceTest {
 			.andExpect(status().isForbidden());
 	}
 
+    @Test
+    void streamCorsAllowsAuthorizationHeader() throws Exception {
+        mvc.perform(options("/api/ai/tasks/example/stream").header("Origin", "http://app.example")
+            .header("Access-Control-Request-Method", "GET")
+            .header("Access-Control-Request-Headers", "Authorization"))
+            .andExpect(status().isOk())
+            .andExpect(header().string("Access-Control-Allow-Origin", "http://app.example"));
+    }
+
+    @Test
+    void asyncAndErrorDispatchAreNotBlockedByAuthentication() throws Exception {
+        for (jakarta.servlet.DispatcherType type : new jakarta.servlet.DispatcherType[]{
+                jakarta.servlet.DispatcherType.ASYNC, jakarta.servlet.DispatcherType.ERROR}) {
+            mvc.perform(get("/api/ai/tasks/example/stream").with(request -> { request.setDispatcherType(type); return request; }))
+                .andExpect(status().isNotFound());
+        }
+    }
+
 	private String token() {
 		JwtClaimsSet claims = JwtClaimsSet.builder()
 			.subject("601")

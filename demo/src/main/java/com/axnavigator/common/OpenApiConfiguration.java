@@ -16,7 +16,10 @@ public class OpenApiConfiguration {
         return new OpenAPI()
             .info(new Info().title("AX Navigator API").version("v1")
                 .description("기업 업무 조회와 AX 투자 분석 API입니다. 내부 API는 Authorize에서 InternalToken에 서버의 INTERNAL_TOKEN 값을 입력한 뒤 실행하세요. /health는 인증 없이 호출할 수 있습니다. 계산 API는 데이터를 변경하지 않습니다."))
-            .components(new Components().addSecuritySchemes("InternalToken", new SecurityScheme()
+            .components(new Components().addSecuritySchemes("BearerAuth", new SecurityScheme()
+                .type(SecurityScheme.Type.HTTP).scheme("bearer").bearerFormat("JWT")
+                .description("로그인 응답의 accessToken을 입력합니다."))
+                .addSecuritySchemes("InternalToken", new SecurityScheme()
                 .type(SecurityScheme.Type.APIKEY).in(SecurityScheme.In.HEADER).name("X-Internal-Token")
                 .description("서버 환경 변수 INTERNAL_TOKEN 값. Bearer 접두어 없이 입력합니다.")));
     }

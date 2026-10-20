@@ -71,14 +71,14 @@ public class SecurityConfiguration {
 			.oauth2ResourceServer(oauth2 -> oauth2
 				.jwt(Customizer.withDefaults())
 				.authenticationEntryPoint((request, response, e) -> JsonErrorWriter.write(response,
-						ErrorCode.UNAUTHORIZED, "인증이 필요하다"))
+						ErrorCode.UNAUTHORIZED, "로그인이 필요하거나 인증이 만료되었습니다."))
 				.accessDeniedHandler((request, response, e) -> JsonErrorWriter.write(response, ErrorCode.FORBIDDEN,
-						"권한이 없다")))
+						"접근 권한이 없습니다.")))
 			.exceptionHandling(ex -> ex
 				.authenticationEntryPoint((request, response, e) -> JsonErrorWriter.write(response,
-						ErrorCode.UNAUTHORIZED, "인증이 필요하다"))
+						ErrorCode.UNAUTHORIZED, "로그인이 필요하거나 인증이 만료되었습니다."))
 				.accessDeniedHandler((request, response, e) -> JsonErrorWriter.write(response, ErrorCode.FORBIDDEN,
-						"권한이 없다")))
+						"접근 권한이 없습니다.")))
 			.build();
 	}
 
