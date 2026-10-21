@@ -27,6 +27,7 @@ ax:
   agent:
     base-url: ${AGENT_BASE_URL:}
     enabled: ${AGENT_ENABLED:false}
+    iam-auth-enabled: ${AGENT_IAM_AUTH_ENABLED:false}
   cors:
     origin: ${CORS_ORIGIN:http://localhost}
   docs:
