@@ -30,7 +30,7 @@ public class AgentClient {
         String base = properties.agent().baseUrl();
         if (base == null || base.isBlank()) throw new IllegalStateException("AGENT_BASE_URL is required when AGENT_ENABLED=true");
         HttpRequest.Builder request = HttpRequest.newBuilder(URI.create(base.replaceAll("/+$", "") + "/tasks/" + taskId + "/" + operation))
-            .timeout(Duration.ofSeconds(10)).header("Content-Type", "application/json")
+            .timeout(Duration.ofSeconds(30)).header("Content-Type", "application/json")
             .header("X-Internal-Token", properties.internalToken())
             .POST(HttpRequest.BodyPublishers.ofString(json.write(body)));
         try {
