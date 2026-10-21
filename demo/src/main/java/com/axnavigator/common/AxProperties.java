@@ -42,7 +42,7 @@ public record AxProperties(
 
 	}
 
-	public record Agent(String baseUrl, boolean enabled) {
+	public record Agent(String baseUrl, boolean enabled, boolean iamAuthEnabled) {
 	}
 
 	public record Cors(@NotBlank String origin) {
