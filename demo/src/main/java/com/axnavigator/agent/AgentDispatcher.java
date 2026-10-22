@@ -5,6 +5,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionalEventListener;
+import com.axnavigator.doc.*;
 import com.axnavigator.task.*;
 
 @Component
@@ -12,7 +13,10 @@ public class AgentDispatcher {
     private static final Logger log = LoggerFactory.getLogger(AgentDispatcher.class);
     private final AgentClient agent;
     private final TaskService tasks;
-    public AgentDispatcher(AgentClient agent, TaskService tasks) { this.agent = agent; this.tasks = tasks; }
+    private final DocumentUploadService documents;
+    public AgentDispatcher(AgentClient agent, TaskService tasks, DocumentUploadService documents) {
+        this.agent = agent; this.tasks = tasks; this.documents = documents;
+    }
 
     @Async("agentExecutor")
     @TransactionalEventListener
@@ -35,6 +39,17 @@ public class AgentDispatcher {
         catch (Exception ex) {
             log.error("Agent resume failed for task {}", command.taskId(), ex);
             tasks.dispatchFailed(command.taskId());
+        }
+    }
+
+    @Async("agentExecutor")
+    @TransactionalEventListener
+    public void ingest(DocumentSignals.Ingest command) {
+        if (!agent.enabled()) { log.info("Agent disabled: uploaded document {}", command.documentId()); return; }
+        try { agent.ingest(command); }
+        catch (Exception ex) {
+            log.error("Agent ingest failed for document {}", command.documentId(), ex);
+            documents.ingestFailed(command.documentId());
         }
     }
 }

@@ -50,6 +50,22 @@ public class Document {
 	@Column(name = "version", nullable = false, length = 20)
 	private String version;
 
+	@Enumerated(EnumType.STRING)
+	@Column(name = "status", nullable = false, length = 20)
+	private DocumentStatus status;
+
+	@Column(name = "content_type", length = 100)
+	private String contentType;
+
+	@Column(name = "file_size")
+	private Long fileSize;
+
+	@Column(name = "sha256", length = 64)
+	private String sha256;
+
+	@Column(name = "page_count")
+	private Integer pageCount;
+
 	@Column(name = "created_at", nullable = false, insertable = false, updatable = false)
 	private LocalDateTime createdAt;
 

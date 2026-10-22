@@ -16,9 +16,13 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.multipart.MultipartException;
+import org.springframework.web.multipart.support.MissingServletRequestPartException;
 import org.springframework.web.method.annotation.HandlerMethodValidationException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
+import com.axnavigator.doc.DocumentUploadService;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -48,9 +52,15 @@ public class GlobalExceptionHandler {
 	}
 
 	@ExceptionHandler({ HttpMessageNotReadableException.class, MethodArgumentTypeMismatchException.class,
-			MissingServletRequestParameterException.class })
+			MissingServletRequestParameterException.class, MissingServletRequestPartException.class,
+			MultipartException.class })
 	ResponseEntity<ErrorResponse> handleUnreadable(Exception ex) {
 		return validation("요청 형식이 올바르지 않습니다.", Map.of());
+	}
+
+	@ExceptionHandler(MaxUploadSizeExceededException.class)
+	ResponseEntity<ErrorResponse> handleUploadSize(MaxUploadSizeExceededException ex) {
+		return validation("파일은 20MB 이하여야 합니다.", Map.of("maxBytes", DocumentUploadService.MAX_FILE_BYTES));
 	}
 
 	@ExceptionHandler(NoResourceFoundException.class)
