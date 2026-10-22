@@ -1,6 +1,7 @@
 package com.axnavigator.ax;
 
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.time.YearMonth;
 import java.util.Collection;
 import java.util.List;
@@ -25,7 +26,6 @@ import com.axnavigator.ax.calc.CalcResults.CandidateScore;
 import com.axnavigator.ax.calc.CalcResults.Evaluation;
 import com.axnavigator.ax.calc.CalcResults.InsufficientCandidate;
 import com.axnavigator.ax.calc.CalcResults.PortfolioResult;
-import com.axnavigator.ax.calc.DataConfidence;
 import com.axnavigator.common.ApiException;
 import com.axnavigator.common.AxProperties;
 import com.axnavigator.common.ErrorCode;
@@ -53,7 +53,8 @@ public class AxCalcService {
 
 	private final AxPolicy policy;
 
-	private final LocalDate asOf;
+	private final LocalDate configuredAsOf;
+	private final ZoneId zone;
 
 	public AxCalcService(CompanyDataLoader loader, BusinessProcessRepository processes,
 			DepartmentRepository departments, AiSolutionRepository solutions, AxPolicy policy,
@@ -63,21 +64,23 @@ public class AxCalcService {
 		this.departments = departments;
 		this.solutions = solutions;
 		this.policy = policy;
-		this.asOf = properties.evaluation().asOf();
+		this.configuredAsOf = properties.evaluation() == null ? null : properties.evaluation().asOf();
+		this.zone = ZoneId.of(properties.timeZone());
 	}
 
 	public AxPolicy policy() {
 		return policy;
 	}
 
+	/** 설정한 기준일이 없으면 오늘. 최근 3개 완료 월은 이 날짜 이전 달까지다. */
 	public LocalDate asOf() {
-		return asOf;
+		return configuredAsOf != null ? configuredAsOf : LocalDate.now(zone);
 	}
 
 	/** budgetKrw가 null이면 예산 제약 없이 평가한다. */
 	@Transactional(readOnly = true)
 	public Evaluation evaluate(Long companyId, Long budgetKrw) {
-		return AxCalculator.evaluate(toInput(loader.load(companyId), budgetKrw), policy, asOf);
+		return AxCalculator.evaluate(toInput(loader.load(companyId), budgetKrw), policy, asOf());
 	}
 
 	/** 업무별 최근 3개 완료 월 기초값 (지표 조회 API용). */
@@ -89,7 +92,7 @@ public class AxCalcService {
 		return data.processes()
 			.stream()
 			.collect(Collectors.toMap(BusinessProcess::getProcessId, p -> AxCalculator.baseValues(p.getProcessId(),
-					byProcess.getOrDefault(p.getProcessId(), List.of()), asOf)));
+					byProcess.getOrDefault(p.getProcessId(), List.of()), asOf())));
 	}
 
 	/** POST /internal/ax/roi — 후보 1개의 AX점수 + 보조 지표. 오류는 §7 "/internal/ax/roi 오류" 표. */
@@ -118,7 +121,7 @@ public class AxCalcService {
 			.findFirst();
 		if (insufficient.isPresent()) {
 			throw new ApiException(ErrorCode.INSUFFICIENT_DATA,
-					"업무 " + processId + "의 최근 3개 완료 월 지표가 부족하다 (기준일 " + asOf + ")",
+					"업무 " + processId + "의 최근 3개 완료 월 지표가 부족하다 (기준일 " + asOf() + ")",
 					Map.of("missingMonths", monthStrings(insufficient.get().missingMonths())));
 		}
 		return evaluation.eligible()
@@ -144,7 +147,7 @@ public class AxCalcService {
 		}
 		CompanyData data = loader.load(companyId);
 		List<Long> requested = candidates == null ? List.of() : validate(data, candidates);
-		Evaluation evaluation = AxCalculator.evaluate(toInput(data, budgetKrw), policy, asOf);
+		Evaluation evaluation = AxCalculator.evaluate(toInput(data, budgetKrw), policy, asOf());
 		return AxCalculator.optimize(evaluation, requested, size);
 	}
 
@@ -202,7 +205,7 @@ public class AxCalcService {
 	private static MetricInput toMetric(ProcessMetric m) {
 		return new MetricInput(m.getMetricId(), m.getProcessId(), m.getPeriodStart(), m.getPeriodEnd(),
 				m.getProcessingCount(), m.getAvgProcessingMinutes(), m.getErrorRate(), m.getHourlyLaborCostKrw(),
-				DataConfidence.valueOf(m.getDataSource().name()));
+				m.getDataSource().confidence());
 	}
 
 }
