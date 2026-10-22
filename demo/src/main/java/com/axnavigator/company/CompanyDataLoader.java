@@ -61,7 +61,7 @@ public class CompanyDataLoader {
 			.toList();
 		return new CompanyData(company, depts, procs,
 				metrics.findByProcessIdInOrderByProcessIdAscPeriodStartAsc(processIds), syss, links,
-				solutions.findByTargetProcessIdInOrderBySolutionId(processIds));
+				solutions.findAllByOrderBySolutionId());
 	}
 
 	/** 기업 소속 부서인지 확인한다. 다른 기업 부서 ID도 404. */

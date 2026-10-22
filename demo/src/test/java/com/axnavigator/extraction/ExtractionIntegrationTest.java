@@ -108,7 +108,18 @@ class ExtractionIntegrationTest {
         assertThat(metricView.path("dataConfidence").asString()).isEqualTo("SURVEY");
         assertThat(metricView.path("missingMonths").size()).isZero();
 
-        // 카탈로그에 이 회사용 솔루션이 없으면 Agent는 성숙도만 저장하고 로드맵 없이 끝낸다.
+        // 확정한 업무 유형으로 시드와 같은 템플릿을 받는다. 지표가 없는 업무는 metricsSufficient=false.
+        assertThat(processRows).extracting(BusinessProcess::getWorkType).containsExactlyInAnyOrder(WorkType.KNOWLEDGE_QA, WorkType.GUIDANCE);
+        JsonNode candidates = body(request("GET","/internal/companies/"+company+"/solution-candidates",null,null));
+        assertThat(candidates.size()).isEqualTo(2);
+        assertThat(candidates.get(0).path("processId").asLong()).isEqualTo(processId);
+        assertThat(candidates.get(0).path("solutionId").asLong()).isEqualTo(501);
+        assertThat(candidates.get(0).path("metricsSufficient").asBoolean()).isTrue();
+        assertThat(candidates.get(1).path("solutionId").asLong()).isEqualTo(502);
+        assertThat(candidates.get(1).path("metricsSufficient").asBoolean()).isFalse();
+        assertThat(body(request("POST","/internal/ax/roi",Map.of("processId",processId,"solutionId",501),null)).path("dataConfidence").asString()).isEqualTo("SURVEY");
+
+        // 추천할 과제가 없으면 Agent는 성숙도만 저장하고 로드맵 없이 끝낸다.
         assertThat(request("PATCH","/internal/tasks/"+id,Map.of("status","DONE","result",Map.of("roadmap",Map.of())),null).statusCode()).isEqualTo(409);
         assertThat(request("PATCH","/internal/tasks/"+id,Map.of("status","DONE"),null).statusCode()).isEqualTo(409);
         assertThat(request("POST","/internal/assessments",Map.of("taskId",id,"scores",Map.of("data",40,"infra",40,"automation",30,"aiCapability",20,"governance",30),
@@ -128,8 +139,8 @@ class ExtractionIntegrationTest {
         var process = new LinkedHashMap<String,Object>();
         process.put("key","p1"); process.put("departmentKey",departmentKey); process.put("name","규정 문의 응답");
         process.put("purpose","반복 문의 응답"); process.put("steps",List.of("문의 접수","규정 검색")); process.put("standardizationLevel",0.8);
-        process.put("requiresApproval",false); process.put("source",Map.of("documentId",1,"page",2));
-        var second = new LinkedHashMap<String,Object>(Map.of("key","p2","departmentKey","d1","name","온보딩 안내","requiresApproval",false));
+        process.put("requiresApproval",false); process.put("workType","KNOWLEDGE_QA"); process.put("source",Map.of("documentId",1,"page",2));
+        var second = new LinkedHashMap<String,Object>(Map.of("key","p2","departmentKey","d1","name","온보딩 안내","requiresApproval",false,"workType","GUIDANCE"));
         var metric = new LinkedHashMap<String,Object>();
         metric.put("processKey","p1"); metric.put("monthlyCount",120); metric.put("avgMinutes",15); metric.put("hourlyLaborCostKrw",35000);
         metric.put("errorRate",0.02); metric.put("dataSource",dataSource);

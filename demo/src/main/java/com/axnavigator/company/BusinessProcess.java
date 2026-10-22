@@ -7,6 +7,8 @@ import org.hibernate.type.SqlTypes;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -49,5 +51,10 @@ public class BusinessProcess {
 
 	@Column(name = "exception_rules", columnDefinition = "text")
 	private String exceptionRules;
+
+	/** NULL이면 아직 분류하지 않은 업무로 보고 매칭하지 않는다. */
+	@Enumerated(EnumType.STRING)
+	@Column(name = "work_type", length = 30)
+	private WorkType workType;
 
 }

@@ -128,7 +128,7 @@ public class ExtractionService {
             BusinessProcess process = new BusinessProcess();
             process.setDepartmentId(departmentIds.get(item.departmentKey())); process.setProcessName(item.name()); process.setPurpose(item.purpose());
             process.setProcessSteps(item.steps() == null ? null : json.write(item.steps())); process.setStandardizationLevel(item.standardizationLevel());
-            process.setRequiresApproval(item.requiresApproval()); process.setExceptionRules(item.exceptionRules());
+            process.setRequiresApproval(item.requiresApproval()); process.setExceptionRules(item.exceptionRules()); process.setWorkType(item.workType());
             processIds.put(item.key(), processes.save(process).getProcessId());
         }
         // 월평균 1건을 계산 기준일의 최근 3개 완료 월에 같은 값으로 저장한다.

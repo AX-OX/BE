@@ -11,7 +11,7 @@ import static org.assertj.core.api.Assertions.*;
 
 class ExtractionValidationTest {
     static final ExtractionDtos.Department HR = new ExtractionDtos.Department("d1", "인사팀");
-    static final ExtractionDtos.Process FAQ = new ExtractionDtos.Process("p1", "d1", "규정 문의 응답", null, null, null, false, null, null);
+    static final ExtractionDtos.Process FAQ = new ExtractionDtos.Process("p1", "d1", "규정 문의 응답", null, null, null, false, null, WorkType.KNOWLEDGE_QA, null);
     static Metric metric(String key) { return new Metric(key, 10, BigDecimal.TEN, 30000, null, DataSourceType.EXTRACTED, null); }
 
     @Test void acceptsConsistentKeys() {
