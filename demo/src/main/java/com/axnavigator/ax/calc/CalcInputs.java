@@ -32,8 +32,11 @@ public final class CalcInputs {
 			boolean requiresApi) {
 	}
 
-	/** 한 기업의 계산 입력 전체. processes·systems는 그 기업 것만, solutions는 그 기업 업무 대상만 넣는다. */
-	public record CompanyInput(long companyId, long budgetKrw, List<ProcessInput> processes,
+	/**
+	 * 한 기업의 계산 입력 전체. processes·systems는 그 기업 것만, solutions는 그 기업 업무 대상만 넣는다.
+	 * budgetKrw가 null이면 예산 제약 없이 계산한다.
+	 */
+	public record CompanyInput(long companyId, Long budgetKrw, List<ProcessInput> processes,
 			List<MetricInput> metrics, List<SystemInput> systems, List<LinkInput> links,
 			List<SolutionInput> solutions) {
 	}

@@ -184,10 +184,25 @@ class AxCalculatorTest {
 	}
 
 	@Test
-	void zeroBudgetIsInsufficient() {
-		CompanyInput noBudget = new CompanyInput(company.companyId(), 0, company.processes(), company.metrics(),
+	void nullBudgetSkipsBudgetConstraint() {
+		CompanyInput unlimited = new CompanyInput(company.companyId(), null, company.processes(), company.metrics(),
 				company.systems(), company.links(), company.solutions());
-		PortfolioResult result = AxCalculator.optimize(AxCalculator.evaluate(noBudget, policy, AS_OF), null, 3);
+		PortfolioResult limited = AxCalculator.optimize(AxCalculator.evaluate(company, policy, AS_OF), null, 3);
+		PortfolioResult result = AxCalculator.optimize(AxCalculator.evaluate(unlimited, policy, AS_OF), null, 3);
+
+		assertThat(result.insufficient()).isFalse();
+		assertThat(result.budgetKrw()).isNull();
+		assertThat(result.remainingBudgetKrw()).isNull();
+		assertThat(result.greedyTop3().violations()).doesNotContain(AxCalculator.BUDGET_EXCEEDED);
+		assertThat(result.validCombinations()).isGreaterThan(limited.validCombinations());
+		assertThat(result.totalAxScore()).isGreaterThanOrEqualTo(limited.totalAxScore());
+	}
+
+	@Test
+	void zeroBudgetIsInsufficient() {
+		CompanyInput zeroBudget = new CompanyInput(company.companyId(), 0L, company.processes(), company.metrics(),
+				company.systems(), company.links(), company.solutions());
+		PortfolioResult result = AxCalculator.optimize(AxCalculator.evaluate(zeroBudget, policy, AS_OF), null, 3);
 
 		assertThat(result.insufficient()).isTrue();
 		assertThat(result.selected()).isEmpty();

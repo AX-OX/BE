@@ -38,6 +38,10 @@ public class AiTask {
 	@Column(name = "request_text", nullable = false, columnDefinition = "text")
 	private String requestText;
 
+	/** 요청에서 추출한 예산(원). null이면 예산 제약 없이 계산한다. */
+	@Column(name = "budget_krw")
+	private Long budgetKrw;
+
 	@Enumerated(EnumType.STRING)
 	@Column(name = "status", nullable = false, length = 30)
 	private TaskStatus status;

@@ -27,13 +27,13 @@ public class Company {
 	@Column(name = "company_name", nullable = false, length = 100)
 	private String companyName;
 
-	@Column(name = "industry", nullable = false, length = 50)
+	@Column(name = "industry", length = 50)
 	private String industry;
 
-	@Column(name = "employee_count", nullable = false)
+	@Column(name = "employee_count")
 	private Integer employeeCount;
 
-	@Column(name = "ax_budget_krw", nullable = false)
+	@Column(name = "ax_budget_krw")
 	private Long axBudgetKrw;
 
 	@Column(name = "created_at", nullable = false, insertable = false, updatable = false)

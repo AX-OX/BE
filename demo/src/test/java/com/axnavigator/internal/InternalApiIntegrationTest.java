@@ -112,7 +112,7 @@ class InternalApiIntegrationTest {
 
 	@Test
 	void portfolioMatchesExpectedFile() throws Exception {
-		JsonNode body = ok(post("/internal/ax/portfolio", "{\"companyId\":1}"));
+		JsonNode body = ok(post("/internal/ax/portfolio", "{\"companyId\":1,\"budgetKrw\":300000000}"));
 
 		assertThat(body.path("insufficient").asBoolean()).isFalse();
 		assertThat(body.path("budgetKrw").asLong()).isEqualTo(expected.path("budget_limit_krw").asLong());
@@ -137,6 +137,18 @@ class InternalApiIntegrationTest {
 		assertThat(body.path("greedyTop3").path("violations")).isEqualTo(greedy.path("violations"));
 		assertThat(body.path("greedyTop3").path("totalFirstYearTcoKrw").asLong())
 			.isEqualTo(greedy.path("total_first_year_tco_krw").asLong());
+	}
+
+	@Test
+	void portfolioWithoutBudgetSkipsBudgetConstraint() throws Exception {
+		JsonNode body = ok(post("/internal/ax/portfolio", "{\"companyId\":1}"));
+
+		assertThat(body.path("insufficient").asBoolean()).isFalse();
+		assertThat(body.path("budgetKrw").isNull()).isTrue();
+		assertThat(body.path("remainingBudgetKrw").isNull()).isTrue();
+		assertThat(body.path("greedyTop3").path("violations").toString()).doesNotContain("BUDGET_EXCEEDED");
+		assertThat(body.path("validCombinations").asInt()).isGreaterThan(expected.path("valid_combinations").asInt());
+		assertError(post("/internal/ax/portfolio", "{\"companyId\":1,\"budgetKrw\":0}"), 400, "VALIDATION_ERROR");
 	}
 
 	@Test

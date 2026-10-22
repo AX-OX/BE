@@ -74,9 +74,10 @@ public class AxCalcService {
 		return asOf;
 	}
 
+	/** budgetKrw가 null이면 예산 제약 없이 평가한다. */
 	@Transactional(readOnly = true)
-	public Evaluation evaluate(Long companyId) {
-		return AxCalculator.evaluate(toInput(loader.load(companyId)), policy, asOf);
+	public Evaluation evaluate(Long companyId, Long budgetKrw) {
+		return AxCalculator.evaluate(toInput(loader.load(companyId), budgetKrw), policy, asOf);
 	}
 
 	/** 업무별 최근 3개 완료 월 기초값 (지표 조회 API용). */
@@ -110,7 +111,7 @@ public class AxCalcService {
 					Map.of("reason", exclusionReason));
 		}
 		Department department = departments.findById(process.getDepartmentId()).orElseThrow();
-		Evaluation evaluation = evaluate(department.getCompanyId());
+		Evaluation evaluation = evaluate(department.getCompanyId(), null);
 		Optional<InsufficientCandidate> insufficient = evaluation.insufficient()
 			.stream()
 			.filter(i -> i.solutionId() == solutionId)
@@ -133,17 +134,17 @@ public class AxCalcService {
 
 	/**
 	 * POST /internal/ax/portfolio. candidates가 비어 있거나 null이면 기업의 선정 가능 후보 전체.
-	 * 넘어온 후보 중 제외 업무는 선정하지 않고 excluded에 담는다.
+	 * 넘어온 후보 중 제외 업무는 선정하지 않고 excluded에 담는다. budgetKrw가 null이면 예산 제약 없이 선정한다.
 	 */
 	@Transactional(readOnly = true)
-	public PortfolioResult portfolio(Long companyId, List<CandidateRef> candidates, Integer maxItems) {
+	public PortfolioResult portfolio(Long companyId, List<CandidateRef> candidates, Integer maxItems, Long budgetKrw) {
 		int size = maxItems == null ? policy.maxItems() : maxItems;
 		if (size < 1) {
 			throw ApiException.validation("maxItems는 1 이상이어야 한다", Map.of("maxItems", size));
 		}
 		CompanyData data = loader.load(companyId);
 		List<Long> requested = candidates == null ? List.of() : validate(data, candidates);
-		Evaluation evaluation = AxCalculator.evaluate(toInput(data), policy, asOf);
+		Evaluation evaluation = AxCalculator.evaluate(toInput(data, budgetKrw), policy, asOf);
 		return AxCalculator.optimize(evaluation, requested, size);
 	}
 
@@ -173,9 +174,9 @@ public class AxCalcService {
 		return months.stream().map(YearMonth::toString).toList();
 	}
 
-	static CompanyInput toInput(CompanyData data) {
+	static CompanyInput toInput(CompanyData data, Long budgetKrw) {
 		Map<Long, Department> depts = data.departmentsById();
-		return new CompanyInput(data.company().getCompanyId(), data.company().getAxBudgetKrw(),
+		return new CompanyInput(data.company().getCompanyId(), budgetKrw,
 				data.processes()
 					.stream()
 					.filter(p -> depts.containsKey(p.getDepartmentId()))

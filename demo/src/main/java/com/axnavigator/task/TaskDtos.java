@@ -14,7 +14,8 @@ public final class TaskDtos {
     public record History(String taskId, TaskStatus status, String requestText, LocalDateTime createdAt, LocalDateTime completedAt) {}
     public enum Decision { APPROVE, REJECT }
     public record ApprovalRequest(@NotNull Decision decision, String reason) {}
-    public record UpdateRequest(TaskStatus status, JsonNode result, String errorMessage, @Size(max = 500) String traceUrl) {}
+    public record UpdateRequest(TaskStatus status, JsonNode result, String errorMessage, @Size(max = 500) String traceUrl,
+        @Positive @Schema(description = "요청에서 추출한 예산(원). 생략하면 기존 값 유지", example = "300000000") Long budgetKrw) {}
     public enum EventType { TOKEN, TOOL_START, TOOL_END, APPROVAL_REQUIRED, DONE, FAILED }
     public record ProgressEvent(@NotNull EventType type, @NotBlank String taskId,
         @NotNull OffsetDateTime ts, @NotBlank String node, @NotNull JsonNode data) {}

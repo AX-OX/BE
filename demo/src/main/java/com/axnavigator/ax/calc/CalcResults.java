@@ -52,7 +52,7 @@ public final class CalcResults {
 	 * @param eligible 선정 가능 후보 (solutionId 오름차순)
 	 * @param maxSavedHours Impact 정규화 기준 (선정 가능 후보 전체의 saved_hours 최대값)
 	 */
-	public record Evaluation(long companyId, long budgetKrw, List<CandidateScore> eligible,
+	public record Evaluation(long companyId, Long budgetKrw, List<CandidateScore> eligible,
 			List<Exclusion> excluded, List<InsufficientCandidate> insufficient, BigDecimal maxSavedHours) {
 	}
 
@@ -68,9 +68,12 @@ public final class CalcResults {
 	public record CandidateWarning(long processId, long solutionId, String code, List<String> missingMonths) {
 	}
 
-	/** warnings는 지표 부족 후보를 알리며 없으면 빈 배열이다. 정책상 제외 업무인 excluded와 구분한다. */
-	public record PortfolioResult(boolean insufficient, long budgetKrw, List<CandidateScore> selected,
-			BigDecimal totalAxScore, long totalFirstYearTcoKrw, long remainingBudgetKrw, int evaluatedCombinations,
+	/**
+	 * warnings는 지표 부족 후보를 알리며 없으면 빈 배열이다. 정책상 제외 업무인 excluded와 구분한다.
+	 * 예산 제약이 없으면 budgetKrw·remainingBudgetKrw는 null이다.
+	 */
+	public record PortfolioResult(boolean insufficient, Long budgetKrw, List<CandidateScore> selected,
+			BigDecimal totalAxScore, long totalFirstYearTcoKrw, Long remainingBudgetKrw, int evaluatedCombinations,
 			int validCombinations, List<Exclusion> excluded, RunnerUp runnerUp, GreedyTop greedyTop3,
 			List<CandidateWarning> warnings) {
 	}
