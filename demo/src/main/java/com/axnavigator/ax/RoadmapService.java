@@ -38,7 +38,7 @@ public class RoadmapService {
             if (!assessment.getTaskId().equals(task.getTaskId()) || !assessment.getCompanyId().equals(task.getCompanyId()))
                 throw ApiException.validation("같은 작업·기업의 성숙도 평가만 연결할 수 있습니다.");
         }
-        Evaluation evaluation = calc.evaluate(task.getCompanyId());
+        Evaluation evaluation = calc.evaluate(task.getCompanyId(), task.getBudgetKrw());
         Map<Long,CandidateScore> eligible = evaluation.eligible().stream().collect(Collectors.toMap(CandidateScore::solutionId, Function.identity()));
         Set<Long> processes = new HashSet<>(), solutions = new HashSet<>();
         Set<Integer> priorities = new HashSet<>();
@@ -52,7 +52,7 @@ public class RoadmapService {
             validateNumbers(item, score);
             total = Math.addExact(total, score.firstYearTcoKrw());
         }
-        if (total > evaluation.budgetKrw()) throw ApiException.validation("기업의 AX 예산을 초과했습니다.");
+        if (evaluation.budgetKrw() != null && total > evaluation.budgetKrw()) throw ApiException.validation("작업 예산을 초과했습니다.");
         for (ItemRequest item : request.items()) {
             Long dependency = eligible.get(item.solutionId()).dependsOnSolutionId();
             if (dependency != null && !solutions.contains(dependency)) throw ApiException.validation("선행 솔루션을 같은 로드맵에 포함해야 합니다.");

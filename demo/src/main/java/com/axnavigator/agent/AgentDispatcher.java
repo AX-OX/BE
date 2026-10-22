@@ -19,7 +19,7 @@ public class AgentDispatcher {
     public void run(TaskSignals.Run command) {
         if (!agent.enabled()) { log.info("Agent disabled: queued task {}", command.taskId()); return; }
         try {
-            tasks.update(command.taskId(), new TaskDtos.UpdateRequest(TaskStatus.RUNNING, null, null, null));
+            tasks.update(command.taskId(), new TaskDtos.UpdateRequest(TaskStatus.RUNNING, null, null, null, null));
             agent.run(command);
         } catch (Exception ex) {
             log.error("Agent run failed for task {}", command.taskId(), ex);

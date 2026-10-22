@@ -40,7 +40,7 @@ public class AxRoadmap {
 	@Column(name = "roadmap_name", nullable = false, length = 200)
 	private String roadmapName;
 
-	@Column(name = "budget_limit_krw", nullable = false)
+	@Column(name = "budget_limit_krw")
 	private Long budgetLimitKrw;
 
 	@Column(name = "total_allocated_krw", nullable = false)

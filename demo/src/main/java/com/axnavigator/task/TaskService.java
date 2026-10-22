@@ -72,6 +72,7 @@ public class TaskService {
         if (request.status() != null) transition(task, request.status());
         if (request.errorMessage() != null) task.setErrorMessage(request.errorMessage());
         if (request.traceUrl() != null) task.setTraceUrl(request.traceUrl());
+        if (request.budgetKrw() != null) task.setBudgetKrw(request.budgetKrw());
         if (terminal(task.getStatus())) {
             if (task.getStatus() == TaskStatus.REJECTED) events.publishEvent(new TaskSignals.Close(taskId));
             else events.publishEvent(new TaskSignals.Publish(terminalEvent(task)));
@@ -89,7 +90,7 @@ public class TaskService {
             case DONE -> {
                 // DONE 이벤트의 결과도 동일한 승인 보존 규칙으로 저장한다.
                 JsonNode result = event.data().get("result");
-                if (result != null) update(taskId, new UpdateRequest(null, result, null, null));
+                if (result != null) update(taskId, new UpdateRequest(null, result, null, null, null));
                 transition(task, TaskStatus.DONE);
             }
             case FAILED -> {

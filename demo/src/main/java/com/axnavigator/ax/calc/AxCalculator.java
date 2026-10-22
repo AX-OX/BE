@@ -266,7 +266,7 @@ public final class AxCalculator {
 			.map(i -> new CandidateWarning(i.processId(), i.solutionId(), INSUFFICIENT_METRICS,
 					i.missingMonths().stream().map(YearMonth::toString).toList()))
 			.toList();
-		long budget = evaluation.budgetKrw();
+		Long budget = evaluation.budgetKrw();
 
 		List<List<CandidateScore>> combinations = combinations(pool, maxItems);
 		List<List<CandidateScore>> valid = new ArrayList<>(
@@ -294,14 +294,15 @@ public final class AxCalculator {
 		RunnerUp runnerUp = valid.size() > 1
 				? new RunnerUp(ids(valid.get(1)), totalAxScore(valid.get(1))) : null;
 		long tco = totalTco(best);
-		return new PortfolioResult(false, budget, best, totalAxScore(best), tco, budget - tco, combinations.size(),
+		Long remaining = budget == null ? null : budget - tco;
+		return new PortfolioResult(false, budget, best, totalAxScore(best), tco, remaining, combinations.size(),
 				valid.size(), evaluation.excluded(), runnerUp, greedyTop, warnings);
 	}
 
-	/** 조합 제약 위반 사유. 비어 있으면 유효한 조합이다. */
-	public static List<String> violations(List<CandidateScore> combination, long budgetKrw) {
+	/** 조합 제약 위반 사유. 비어 있으면 유효한 조합이다. budgetKrw가 null이면 예산은 검사하지 않는다. */
+	public static List<String> violations(List<CandidateScore> combination, Long budgetKrw) {
 		List<String> violations = new ArrayList<>();
-		if (totalTco(combination) > budgetKrw) {
+		if (budgetKrw != null && totalTco(combination) > budgetKrw) {
 			violations.add(BUDGET_EXCEEDED);
 		}
 		Set<Long> ids = new HashSet<>(ids(combination));
