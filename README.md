@@ -106,10 +106,11 @@ cd demo
 | GET | `/internal/companies/{companyId}/budget` | | `{ companyId, axBudgetKrw }` | 404 |
 | GET | `/internal/solutions` | | 카탈로그 전체 (`targetProcessId`, `dependsOnSolutionId`, 비율 0~1) | |
 | POST | `/internal/ax/roi` | `{ processId, solutionId }` | 기준 문서 §7 형식 (AX점수 + low/base/high 시나리오) | 404 `NOT_FOUND`, 400 `VALIDATION_ERROR`(`hint.expectedProcessId`), 400 `EXCLUDED_PROCESS`(`hint.reason`), 400 `INSUFFICIENT_DATA`(`hint.missingMonths`) |
-| POST | `/internal/ax/portfolio` | `{ companyId, candidates?: [{ processId, solutionId }], maxItems?: 3 }` | 기준 문서 §7 형식 + `warnings` | 404, 400 |
+| POST | `/internal/ax/portfolio` | `{ companyId, candidates?: [{ processId, solutionId }], maxItems?: 3, budgetKrw? }` | 기준 문서 §7 형식 + `warnings` | 404, 400 |
 
 - 내부 API는 담당자 이메일·연락처를 **마스킹하지 않는다** (마스킹은 Agent Guardrail 담당).
 - 지표·계산의 기준일은 `AX_EVALUATION_AS_OF`(기본 2026-10-01). 최근 3개 완료 월 중 빠진 월이 있으면 그 업무 후보는 선정 가능 후보에서 빠진다.
+- 포트폴리오 예산은 요청의 `budgetKrw`(양수)를 쓴다. 생략하면 예산 제약 없이 선정하고 `budgetKrw`·`remainingBudgetKrw`는 `null`이다. 기업의 `axBudgetKrw`는 계산에 쓰지 않는다.
 
 ### 로컬 확인 (curl)
 
@@ -120,7 +121,7 @@ curl -s "localhost:8080/internal/companies/1/metrics?departmentId=103" -H "$H"
 curl -s "localhost:8080/internal/companies/1/processes?departmentId=104" -H "$H"
 # → 404 {"code":"NOT_FOUND","message":"부서 104는 없다","hint":{"validIds":[101,102,103]}}
 curl -s localhost:8080/internal/ax/roi -H "$H" -H 'Content-Type: application/json' -d '{"processId":207,"solutionId":507}'
-curl -s localhost:8080/internal/ax/portfolio -H "$H" -H 'Content-Type: application/json' -d '{"companyId":1}'
+curl -s localhost:8080/internal/ax/portfolio -H "$H" -H 'Content-Type: application/json' -d '{"companyId":1,"budgetKrw":300000000}'
 # → selected [507, 508, 509], totalAxScore 265.0, totalFirstYearTcoKrw 295000000, remainingBudgetKrw 5000000,
 #   evaluatedCombinations 56, validCombinations 39, runnerUp [504, 507, 509] 261.3,
 #   greedyTop3 [507, 508, 504] → BUDGET_EXCEEDED, MISSING_DEPENDENCY
@@ -147,7 +148,7 @@ curl -s localhost:8080/internal/ax/portfolio -H "$H" -H 'Content-Type: applicati
 
 ## 회원가입·로그인 및 JWT
 
-- `POST /api/auth/signup`: `{"email":"newuser@gaon.example","password":"ChangeMe123!","name":"홍길동"}` → 201 `{"userId":603}`. 기업은 서버의 기본 기업(1)으로 지정하며 자동 로그인하지 않는다.
+- `POST /api/auth/signup`: `{"email":"newuser@gaon.example","password":"ChangeMe123!","name":"홍길동"}` → 201 `{"userId":603}`. 가입할 때마다 `name`을 회사명으로 하는 기업을 새로 만들어 연결하며 자동 로그인하지 않는다. 업종·직원 수·예산은 비워 둔다.
 - `POST /api/auth/login`: `{"email":"analyst1@gaon.example","password":"ChangeMe123!"}` → 200 `{accessToken, user: {userId, name, companyId}}`.
 - 시드 계정: `analyst1@gaon.example`(601), `analyst2@gaon.example`(602), 비밀번호는 모두 `ChangeMe123!`이다.
 - 가입 비밀번호는 8자 이상 영문·숫자를 포함해야 하며 BCrypt로 저장한다. BCrypt의 UTF-8 72바이트 한도를 넘으면 400이다. 이메일과 이름은 DB 길이 한도인 100자, 50자를 따른다.
@@ -189,7 +190,7 @@ cd demo
 | Method | 경로 | 요청 / 응답 |
 |---|---|---|
 | POST | `/internal/tasks/{taskId}/events` | `{type, taskId, ts, node, data}` → 204 |
-| PATCH | `/internal/tasks/{taskId}` | `{status?, result?, errorMessage?, traceUrl?}` → 작업 상태·결과 |
+| PATCH | `/internal/tasks/{taskId}` | `{status?, result?, errorMessage?, traceUrl?, budgetKrw?}` → 작업 상태·결과 |
 | POST | `/internal/assessments` | `{taskId, scores: {data, infra, automation, aiCapability, governance}, criteriaVersion, evidence}` → `{assessmentId}` |
 | POST | `/internal/roadmaps` | `{taskId, companyId, assessmentId?, roadmapName, items}` → `{roadmapId, itemIds}` |
 | POST | `/internal/projects` | `{itemId, ownerDepartmentId, projectName}` → `{projectId}` |
@@ -201,7 +202,7 @@ cd demo
 - `ts`는 오프셋 포함 ISO 8601 문자열이다. 이벤트의 taskId는 경로와 같아야 하고 data는 JSON 객체다. TOKEN의 data는 `{text}`, TOOL_START/END는 `{tool, label, ok}`, APPROVAL_REQUIRED는 `{roadmap, items, totalAllocatedKrw, budgetKrw}`, DONE은 `{result}`, FAILED는 `{message, traceUrl}`를 사용한다.
 - 성숙도는 5개 영역의 0~100 점수와 `criteriaVersion: "v1.0"`, 근거 배열을 받는다. 누락 시 400과 hint.missingAreas를 반환하며, 총점은 정책 파일의 가중치로 Spring이 계산한다. 영역 부족 시 Agent는 저장하지 않고 부분 점수를 작업 result.maturity에 보관한다.
 - 로드맵 항목은 기존 RoadmapItem camelCase 계약을 따른다. 점수·금액은 `/internal/ax/portfolio`의 selected와 scenarios.base를 그대로 복사한다. `allocatedBudgetKrw=firstYearTcoKrw`, `expectedAnnualSavingKrw=annualSavingKrw`, `threeYearNetValueKrw=threeYearNetKrw`다. 기타 필수 필드는 processId, solutionId, itemName, priorityOrder, phase(SHORT/MID/LONG), startMonth, durationMonths, axScore, impactScore, feasibilityScore, roiPct, rationale, evidence이며 paybackMonths는 null 가능하다.
-- 승인 전 로드맵 등록은 409, 재계산 불일치는 400 CALCULATION_MISMATCH(hint.expected)다. 예산·선행 솔루션·업무 중복을 검증한다. 승인자는 task.userId, 승인 시각은 Spring의 approval.decidedAt, 예산은 등록 시 기업 예산 스냅샷을 사용한다.
+- 승인 전 로드맵 등록은 409, 재계산 불일치는 400 CALCULATION_MISMATCH(hint.expected)다. 작업 예산(`budgetKrw`, Agent가 요청에서 추출해 PATCH로 저장)·선행 솔루션·업무 중복을 검증한다. 작업 예산이 없으면 예산은 검증하지 않고 `budget_limit_krw`를 비워 둔다. 승인자는 task.userId, 승인 시각은 Spring의 approval.decidedAt를 사용한다.
 - 같은 taskId의 로드맵, 같은 itemId의 프로젝트 재시도는 기존 ID를 반환한다. DB 잠금으로 동시 승인·등록도 보호한다.
 - 프로젝트는 REGISTERED → IN_PROGRESS → COMPLETED이며 각 상태는 ON_HOLD와 상호 전환할 수 있다. 최초 프로젝트 등록은 APPROVED 로드맵만 가능하다.
 
