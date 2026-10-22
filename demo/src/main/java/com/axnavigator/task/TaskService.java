@@ -5,6 +5,7 @@ import java.util.*;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.axnavigator.ax.AxAssessmentRepository;
 import com.axnavigator.common.*;
 import com.axnavigator.company.DepartmentRepository;
 import com.axnavigator.doc.*;
@@ -19,13 +20,14 @@ public class TaskService {
     private final DepartmentRepository departments;
     private final DocumentRepository documents;
     private final ExtractionDraftRepository drafts;
+    private final AxAssessmentRepository assessments;
     private final JsonSupport json;
     private final ApplicationEventPublisher events;
     private final ZoneId zone;
 
     public TaskService(AiTaskRepository tasks, DepartmentRepository departments, DocumentRepository documents, ExtractionDraftRepository drafts,
-            JsonSupport json, ApplicationEventPublisher events, AxProperties properties) {
-        this.tasks = tasks; this.departments = departments; this.documents = documents; this.drafts = drafts;
+            AxAssessmentRepository assessments, JsonSupport json, ApplicationEventPublisher events, AxProperties properties) {
+        this.tasks = tasks; this.departments = departments; this.documents = documents; this.drafts = drafts; this.assessments = assessments;
         this.json = json; this.events = events; this.zone = ZoneId.of(properties.timeZone());
     }
 
@@ -165,9 +167,12 @@ public class TaskService {
             default -> false;
         };
         if (!valid) throw ApiException.invalidState("허용되지 않은 작업 상태 변경입니다: " + current + " → " + next);
-        // 승인 없이 내부 호출로 완료시키는 것을 막는다.
-        if (next == TaskStatus.DONE && !"APPROVE".equals(Optional.ofNullable(json.read(task.getResult())).orElse(json.object()).path("approval").path("decision").asString()))
-            throw ApiException.invalidState("승인된 작업만 완료할 수 있습니다.");
+        // 승인 없이 내부 호출로 완료시키는 것을 막는다. 예외: 추천할 솔루션이 없어 성숙도 진단만 저장하고 끝나는 작업(로드맵 없음).
+        JsonNode result = Optional.ofNullable(json.read(task.getResult())).orElse(json.object());
+        boolean approved = "APPROVE".equals(result.path("approval").path("decision").asString());
+        boolean assessmentOnly = result.path("roadmap").isMissingNode() || result.path("roadmap").isNull();
+        if (next == TaskStatus.DONE && !approved && !(assessmentOnly && assessments.existsByTaskId(task.getTaskId())))
+            throw ApiException.invalidState("승인된 작업이나 성숙도 진단만 저장한 작업만 완료할 수 있습니다.");
         task.setStatus(next);
         if (terminal(next)) task.setCompletedAt(LocalDateTime.now(zone));
     }
