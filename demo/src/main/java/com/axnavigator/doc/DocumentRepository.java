@@ -13,6 +13,8 @@ public interface DocumentRepository extends JpaRepository<Document, Long> {
 
 	long countByCompanyIdAndStatusNot(Long companyId, DocumentStatus status);
 
+	List<Document> findByCompanyIdAndStatusOrderByDocumentId(Long companyId, DocumentStatus status);
+
 	boolean existsByCompanyIdAndSha256AndStatusNot(Long companyId, String sha256, DocumentStatus status);
 
 	@Lock(LockModeType.PESSIMISTIC_WRITE)

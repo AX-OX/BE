@@ -23,7 +23,11 @@ public class AgentClient {
     public AgentClient(AxProperties properties, JsonSupport json) { this.properties = properties; this.json = json; }
     public boolean enabled() { return properties.agent().enabled(); }
     public void run(TaskSignals.Run command) {
-        post(command.taskId(), "run", java.util.Map.of("companyId", command.companyId(), "userId", command.userId(), "requestText", command.requestText()));
+        post(command.taskId(), "run", java.util.Map.of("companyId", command.companyId(), "userId", command.userId(), "requestText", command.requestText(),
+            "companyDataConfirmed", command.companyDataConfirmed(), "documentIds", command.documentIds()));
+    }
+    public void confirm(TaskSignals.Confirm command) {
+        post(command.taskId(), "confirm", java.util.Map.of("userId", command.userId()));
     }
     public void resume(TaskSignals.Resume command) {
         var body = new LinkedHashMap<String,Object>();

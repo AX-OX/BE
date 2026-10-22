@@ -7,3 +7,5 @@ ax:
     dir: ../db/docs
   cors:
     origin: http://app.example
+  evaluation:
+    as-of: 2026-10-01
