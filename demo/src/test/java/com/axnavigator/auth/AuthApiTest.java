@@ -16,6 +16,8 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.jwt.*;
 import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
 import com.axnavigator.common.SecurityConfiguration;
+import com.axnavigator.company.Company;
+import com.axnavigator.company.CompanyRepository;
 import tools.jackson.databind.json.JsonMapper;
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -31,12 +33,19 @@ class AuthApiTest {
     @Autowired JwtDecoder decoder;
     @Autowired JwtEncoder encoder;
     @MockitoBean UserAccountRepository users;
+    @MockitoBean CompanyRepository companies;
     static final JsonMapper JSON = JsonMapper.builder().build();
 
-    @Test void signupHashesPasswordAndReturnsOnlyId() throws Exception {
+    @Test void signupCreatesCompanyHashesPasswordAndReturnsOnlyId() throws Exception {
+        when(companies.saveAndFlush(any())).thenAnswer(invocation -> {
+            Company company = invocation.getArgument(0);
+            assertThat(company.getCompanyName()).isEqualTo("홍길동");
+            assertThat(company.getAxBudgetKrw()).isNull();
+            company.setCompanyId(7L); return company;
+        });
         when(users.saveAndFlush(any())).thenAnswer(invocation -> {
             UserAccount user = invocation.getArgument(0);
-            assertThat(user.getCompanyId()).isEqualTo(1L);
+            assertThat(user.getCompanyId()).isEqualTo(7L);
             assertThat(passwords.matches("ChangeMe123!", user.getPasswordHash())).isTrue();
             user.setUserId(603L); return user;
         });
@@ -64,7 +73,7 @@ class AuthApiTest {
         }
         mvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON).content("{}"))
             .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
-        verifyNoInteractions(users);
+        verifyNoInteractions(users, companies);
     }
 
     @Disabled("개발 중 permitAll 및 내부 토큰 필터 비활성화. 인증 복구 시 이 테스트도 다시 활성화한다.")

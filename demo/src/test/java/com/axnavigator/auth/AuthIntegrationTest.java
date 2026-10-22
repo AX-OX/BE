@@ -1,5 +1,6 @@
 package com.axnavigator.auth;
 
+import com.axnavigator.company.CompanyRepository;
 import com.axnavigator.support.IntegrationTest;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -18,6 +19,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class AuthIntegrationTest {
     @Autowired MockMvc mvc;
     @Autowired UserAccountRepository users;
+    @Autowired CompanyRepository companies;
     @Autowired PasswordEncoder passwords;
 
     @Test void bothSeedAccountsLoginAgainstPostgres() throws Exception {
@@ -35,7 +37,8 @@ class AuthIntegrationTest {
         mvc.perform(post("/api/auth/signup").contentType(MediaType.APPLICATION_JSON).content(body))
             .andExpect(status().isCreated()).andExpect(jsonPath("$.userId").isNumber());
         UserAccount user = users.findByEmail("integration@gaon.example").orElseThrow();
-        assertThat(user.getCompanyId()).isEqualTo(1L);
+        assertThat(user.getCompanyId()).isNotEqualTo(1L);
+        assertThat(companies.findById(user.getCompanyId()).orElseThrow().getCompanyName()).isEqualTo("통합 테스트");
         assertThat(passwords.matches("ChangeMe123!",user.getPasswordHash())).isTrue();
         mvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
             .content("{\"email\":\"integration@gaon.example\",\"password\":\"ChangeMe123!\"}"))

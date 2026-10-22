@@ -24,7 +24,6 @@ public record AxProperties(
 		@Valid @NotNull Cors cors,
 		@Valid @NotNull Docs docs,
 		@Valid @NotNull Evaluation evaluation,
-		@NotNull Long defaultCompanyId,
 		@NotBlank String timeZone) {
 
 	public record Jwt(@NotBlank String secret, @NotNull Duration ttl) {
