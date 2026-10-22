@@ -57,7 +57,7 @@ INTERNAL_TOKEN=local-internal-token \
 | `AGENT_ENABLED` | | `false` | `false`면 Agent를 호출하지 않고 로그만 남김 |
 | `CORS_ORIGIN` | | `http://localhost` | 쉼표로 여러 개 가능 |
 | `AX_DOCS_DIR` | | `../db/docs` | 근거 원문 폴더 |
-| `AX_EVALUATION_AS_OF` | | `2026-10-01` | 계산 기준일 (최근 3개 완료 월 = 2026-07~09) |
+| `AX_EVALUATION_AS_OF` | | (빈 값 = 오늘) | 계산 기준일. 시드 시연은 `2026-10-01`로 설정 (최근 3개 완료 월 = 2026-07~09) |
 | `AX_TIME_ZONE` | | `Asia/Seoul` | `decidedAt` 등 시각 표기 기준 |
 | `PORT` | | `8080` | |
 
@@ -109,7 +109,7 @@ cd demo
 | POST | `/internal/ax/portfolio` | `{ companyId, candidates?: [{ processId, solutionId }], maxItems?: 3, budgetKrw? }` | 기준 문서 §7 형식 + `warnings` | 404, 400 |
 
 - 내부 API는 담당자 이메일·연락처를 **마스킹하지 않는다** (마스킹은 Agent Guardrail 담당).
-- 지표·계산의 기준일은 `AX_EVALUATION_AS_OF`(기본 2026-10-01). 최근 3개 완료 월 중 빠진 월이 있으면 그 업무 후보는 선정 가능 후보에서 빠진다.
+- 지표·계산의 기준일은 `AX_EVALUATION_AS_OF`이며 비어 있으면 오늘(`AX_TIME_ZONE` 기준)이다. 시드 데이터로 시연할 때는 `2026-10-01`로 설정한다. 최근 3개 완료 월 중 빠진 월이 있으면 그 업무 후보는 선정 가능 후보에서 빠진다.
 - 포트폴리오 예산은 요청의 `budgetKrw`(양수)를 쓴다. 생략하면 예산 제약 없이 선정하고 `budgetKrw`·`remainingBudgetKrw`는 `null`이다. 기업의 `axBudgetKrw`는 계산에 쓰지 않는다.
 
 ### 로컬 확인 (curl)
@@ -181,6 +181,8 @@ cd demo
 | GET | `/api/ai/tasks?mine=true` | `[{taskId, status, requestText, createdAt, completedAt}]`, 최신순 |
 | GET | `/api/ai/tasks/{taskId}/stream` | `text/event-stream` |
 | POST | `/api/ai/tasks/{taskId}/approval` | `{decision: "APPROVE" 또는 "REJECT", reason?}` → 202 |
+| GET | `/api/ai/tasks/{taskId}/extraction` | `{draftId, status: DRAFT 또는 CONFIRMED, documentIds, payload}` |
+| PUT | `/api/ai/tasks/{taskId}/extraction/confirm` | 수정한 `payload` 전체 → 202 |
 | GET | `/api/docs/{documentId}` | `{documentId, title, docType, accessLevel, version, content, pages}` |
 | POST | `/api/documents` | multipart `file`(PDF) → 201 `{documentId, status: "UPLOADED"}` |
 | GET | `/api/documents` | `[{documentId, title, docType, status, fileSize, pageCount, createdAt}]`, 최신순 |
@@ -199,14 +201,17 @@ PDF 업로드는 JWT 기업의 문서로 등록한다. PDF 시그니처(`%PDF-`)
 | POST | `/internal/roadmaps` | `{taskId, companyId, assessmentId?, roadmapName, items}` → `{roadmapId, itemIds}` |
 | POST | `/internal/projects` | `{itemId, ownerDepartmentId, projectName}` → `{projectId}` |
 | PATCH | `/internal/projects/{projectId}/status` | `{status}` → `{projectId, projectStatus}` |
+| POST | `/internal/extractions` | `{taskId, documentIds, payload}` → `{draftId}` |
 | PATCH | `/internal/documents/{documentId}` | `{status: INDEXED 또는 FAILED, pageCount?, pages?: [{page, text}], errorMessage?}` → 문서 요약 |
 
 - 문서 색인 결과는 UPLOADED 문서에만 한 번 저장한다(이후 409). INDEXED는 `pageCount`와 1페이지부터 빠짐없는 `pages`가 필요하며 최대 100페이지다. FAILED는 pages 없이 보내고 `errorMessage`는 로그에만 남긴다.
 
-- 상태는 `QUEUED → RUNNING → WAITING_APPROVAL → RUNNING → DONE`이며 실패는 FAILED, 사용자 거절은 REJECTED다. 종료 상태를 RUNNING으로 되돌릴 수 없다. 승인 API만 WAITING_APPROVAL에서 RUNNING·REJECTED로 전환할 수 있다.
+- 상태는 `QUEUED → RUNNING → (WAITING_CONFIRMATION → RUNNING) → WAITING_APPROVAL → RUNNING → DONE`이며 실패는 FAILED, 사용자 거절은 REJECTED다. 종료 상태를 RUNNING으로 되돌릴 수 없다. 확정 API만 WAITING_CONFIRMATION에서, 승인 API만 WAITING_APPROVAL에서 RUNNING·REJECTED로 전환할 수 있다.
+- 기업 데이터 확정: 부서가 없는 기업은 미확정이다. Agent는 색인 완료 문서에서 추출한 결과를 `POST /internal/extractions`로 저장하고 `CONFIRMATION_REQUIRED` 이벤트를 보낸다(draft 없이 보내면 409). 사용자가 확정하면 Spring이 key 참조를 검증하고 부서, 업무, 지표, 시스템, 업무-시스템 연결을 저장한 뒤 Agent를 재개한다. 기업당 한 번만 확정한다.
+- `payload`는 `{company?: {industry, employeeCount}, departments: [{key, name}], processes: [{key, departmentKey, name, purpose?, steps?, standardizationLevel?, requiresApproval, exceptionRules?, source?}], metrics: [{processKey, monthlyCount, avgMinutes, hourlyLaborCostKrw, errorRate?, dataSource, source?}], systems: [{key, name, type, apiAvailable, dataAccessLevel, cloudBased, processKeys}]}`이다. `source`는 `{documentId, page}`다. 지표는 업무당 월평균 1건이며 계산 기준일의 최근 3개 완료 월에 같은 값으로 저장한다. `dataSource`는 문서 값을 그대로 쓰면 `EXTRACTED`, 사용자가 입력하거나 고치면 `USER_INPUT`이다. 신뢰도 표시는 ASSUMED < EXTRACTED < SURVEY(= USER_INPUT) < MEASURED다.
 - `result`는 JSON 객체이며 Spring은 `approval` 외의 필드를 해석하지 않고 보관한다. PATCH에서 result를 보내면 통째로 교체하지만 기존 approval은 보존하며, 내부 호출자가 넣은 approval은 무시한다. 필드 생략은 기존 값 유지다.
 - APPROVAL_REQUIRED 이벤트는 WAITING_APPROVAL, DONE·FAILED 이벤트는 종료 상태를 DB에도 반영한다. DONE의 data.result 역시 승인 기록을 보존한다. 상태를 먼저 PATCH하고 같은 상태의 이벤트를 보내는 방식도 지원한다.
-- `ts`는 오프셋 포함 ISO 8601 문자열이다. 이벤트의 taskId는 경로와 같아야 하고 data는 JSON 객체다. TOKEN의 data는 `{text}`, TOOL_START/END는 `{tool, label, ok}`, APPROVAL_REQUIRED는 `{roadmap, items, totalAllocatedKrw, budgetKrw}`, DONE은 `{result}`, FAILED는 `{message, traceUrl}`를 사용한다.
+- `ts`는 오프셋 포함 ISO 8601 문자열이다. 이벤트의 taskId는 경로와 같아야 하고 data는 JSON 객체다. TOKEN의 data는 `{text}`, TOOL_START/END는 `{tool, label, ok}`, CONFIRMATION_REQUIRED는 `{}`, APPROVAL_REQUIRED는 `{roadmap, items, totalAllocatedKrw, budgetKrw}`, DONE은 `{result}`, FAILED는 `{message, traceUrl}`를 사용한다.
 - 성숙도는 5개 영역의 0~100 점수와 `criteriaVersion: "v1.0"`, 근거 배열을 받는다. 누락 시 400과 hint.missingAreas를 반환하며, 총점은 정책 파일의 가중치로 Spring이 계산한다. 영역 부족 시 Agent는 저장하지 않고 부분 점수를 작업 result.maturity에 보관한다.
 - 로드맵 항목은 기존 RoadmapItem camelCase 계약을 따른다. 점수·금액은 `/internal/ax/portfolio`의 selected와 scenarios.base를 그대로 복사한다. `allocatedBudgetKrw=firstYearTcoKrw`, `expectedAnnualSavingKrw=annualSavingKrw`, `threeYearNetValueKrw=threeYearNetKrw`다. 기타 필수 필드는 processId, solutionId, itemName, priorityOrder, phase(SHORT/MID/LONG), startMonth, durationMonths, axScore, impactScore, feasibilityScore, roiPct, rationale, evidence이며 paybackMonths는 null 가능하다.
 - 승인 전 로드맵 등록은 409, 재계산 불일치는 400 CALCULATION_MISMATCH(hint.expected)다. 작업 예산(`budgetKrw`, Agent가 요청에서 추출해 PATCH로 저장)·선행 솔루션·업무 중복을 검증한다. 작업 예산이 없으면 예산은 검증하지 않고 `budget_limit_krw`를 비워 둔다. 승인자는 task.userId, 승인 시각은 Spring의 approval.decidedAt를 사용한다.
@@ -225,7 +230,8 @@ PDF 업로드는 JWT 기업의 문서로 등록한다. PDF 시그니처(`%PDF-`)
 
 실제 연결 시 `AGENT_ENABLED=true`, `AGENT_BASE_URL=http://agent:8000`을 설정한다. Spring은 커밋 이후 비동기로 다음을 호출하며 Agent는 202를 반환해야 한다.
 
-- `POST /tasks/{taskId}/run`: `{companyId, userId, requestText}`
+- `POST /tasks/{taskId}/run`: `{companyId, userId, requestText, companyDataConfirmed, documentIds}`. 미확정 기업이면 `documentIds`에 색인 완료 문서 ID를 담는다.
+- `POST /tasks/{taskId}/confirm`: `{userId}`. 사용자가 기업 데이터를 확정한 뒤 호출한다.
 - `POST /tasks/{taskId}/resume`: `{decision, userId, reason}`
 - `POST /documents/{documentId}/ingest`: multipart `{companyId, fileName, contentType, file}`. 색인 결과는 `PATCH /internal/documents/{documentId}`로 돌려준다. 호출이 실패하면 문서는 FAILED가 된다.
 
