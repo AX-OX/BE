@@ -108,6 +108,15 @@ class ExtractionIntegrationTest {
         assertThat(metricView.path("dataConfidence").asString()).isEqualTo("SURVEY");
         assertThat(metricView.path("missingMonths").size()).isZero();
 
+        // 카탈로그에 이 회사용 솔루션이 없으면 Agent는 성숙도만 저장하고 로드맵 없이 끝낸다.
+        assertThat(request("PATCH","/internal/tasks/"+id,Map.of("status","DONE","result",Map.of("roadmap",Map.of())),null).statusCode()).isEqualTo(409);
+        assertThat(request("PATCH","/internal/tasks/"+id,Map.of("status","DONE"),null).statusCode()).isEqualTo(409);
+        assertThat(request("POST","/internal/assessments",Map.of("taskId",id,"scores",Map.of("data",40,"infra",40,"automation",30,"aiCapability",20,"governance",30),
+            "criteriaVersion","v1.0","evidence",List.of(Map.of("documentId",documentId,"section","p.1"))),null).statusCode()).isEqualTo(200);
+        var finished = new LinkedHashMap<String,Object>(); finished.put("roadmap",null); finished.put("answer","AX 성숙도 진단을 완료했습니다.");
+        assertThat(request("PATCH","/internal/tasks/"+id,Map.of("status","DONE","result",finished),null).statusCode()).isEqualTo(200);
+        assertThat(tasks.findById(id).orElseThrow().getStatus()).isEqualTo(TaskStatus.DONE);
+
         String next = createTask(token);
         JsonNode nextRun = json.read(awaitCall("/tasks/"+next+"/run").body());
         assertThat(nextRun.path("companyDataConfirmed").asBoolean()).isTrue();
