@@ -7,6 +7,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.util.List;
 
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -84,8 +85,27 @@ class InternalApiIntegrationTest {
 		JsonNode s508 = solutions.get(7);
 		assertThat(s508.path("solutionId").asLong()).isEqualTo(508);
 		assertThat(s508.path("dependsOnSolutionId").asLong()).isEqualTo(509);
-		assertThat(s508.path("targetProcessId").asLong()).isEqualTo(208);
+		assertThat(s508.path("workType").asString()).isEqualTo("CODE_REVIEW");
 		assertThat(s508.path("automationRateBase").decimalValue()).isLessThanOrEqualTo(BigDecimal.ONE);
+	}
+
+	@Test
+	void solutionCandidatesPairSeedProcessesWithTemplates() throws Exception {
+		JsonNode candidates = ok(get("/internal/companies/1/solution-candidates"));
+		assertThat(candidates.size()).isEqualTo(9);
+		for (JsonNode c : candidates) {
+			assertThat(c.path("processId").asLong()).isEqualTo(c.path("solutionId").asLong() - 300);
+			assertThat(c.path("metricsSufficient").asBoolean()).isTrue();
+		}
+		JsonNode c503 = candidates.get(2);
+		assertThat(c503.path("workType").asString()).isEqualTo("DECISION_SUPPORT");
+		assertThat(c503.path("excludedReason").asString()).isNotBlank();
+		JsonNode c508 = candidates.get(7);
+		assertThat(c508.path("dependsOn").path("processId").asLong()).isEqualTo(209);
+		assertThat(c508.path("dependsOn").path("solutionId").asLong()).isEqualTo(509);
+		assertThat(candidates.get(0).path("dependsOn").isNull()).isTrue();
+		assertThat(candidates.get(0).path("excludedReason").isNull()).isTrue();
+		assertError(get("/internal/companies/999/solution-candidates"), 404, "NOT_FOUND");
 	}
 
 	@Test
@@ -103,7 +123,8 @@ class InternalApiIntegrationTest {
 		assertError(post("/internal/ax/roi", "{\"processId\":201,\"solutionId\":599}"), 404, "NOT_FOUND");
 		JsonNode mismatch = assertError(post("/internal/ax/roi", "{\"processId\":201,\"solutionId\":502}"), 400,
 				"VALIDATION_ERROR");
-		assertThat(mismatch.path("hint").path("expectedProcessId").asLong()).isEqualTo(202);
+		assertThat(mismatch.path("hint").path("processWorkType").asString()).isEqualTo("KNOWLEDGE_QA");
+		assertThat(mismatch.path("hint").path("solutionWorkType").asString()).isEqualTo("GUIDANCE");
 		JsonNode excluded = assertError(post("/internal/ax/roi", "{\"processId\":203,\"solutionId\":503}"), 400,
 				"EXCLUDED_PROCESS");
 		assertThat(excluded.path("hint").path("reason").asString())
@@ -129,11 +150,13 @@ class InternalApiIntegrationTest {
 		assertThat(body.path("evaluatedCombinations").asInt()).isEqualTo(expected.path("evaluated_combinations").asInt());
 		assertThat(body.path("validCombinations").asInt()).isEqualTo(expected.path("valid_combinations").asInt());
 		assertThat(body.path("excluded")).isEqualTo(expected.path("excluded"));
-		assertThat(body.path("runnerUp").path("solutionIds")).isEqualTo(expected.path("runner_up").path("solution_ids"));
+		assertThat(solutionIds(body.path("runnerUp").path("candidates")))
+			.isEqualTo(expected.path("runner_up").path("solution_ids").values().stream().map(JsonNode::asLong).toList());
 		assertThat(body.path("runnerUp").path("totalAxScore").decimalValue())
 			.isEqualByComparingTo(expected.path("runner_up").path("total_ax_score").decimalValue());
 		JsonNode greedy = expected.path("greedy_top3_by_score");
-		assertThat(body.path("greedyTop3").path("solutionIds")).isEqualTo(greedy.path("solution_ids"));
+		assertThat(solutionIds(body.path("greedyTop3").path("candidates")))
+			.isEqualTo(greedy.path("solution_ids").values().stream().map(JsonNode::asLong).toList());
 		assertThat(body.path("greedyTop3").path("violations")).isEqualTo(greedy.path("violations"));
 		assertThat(body.path("greedyTop3").path("totalFirstYearTcoKrw").asLong())
 			.isEqualTo(greedy.path("total_first_year_tco_krw").asLong());
@@ -167,6 +190,10 @@ class InternalApiIntegrationTest {
 		assertError(post("/internal/ax/portfolio", "{\"companyId\":99}"), 404, "NOT_FOUND");
 		assertError(post("/internal/ax/portfolio",
 				"{\"companyId\":1,\"candidates\":[{\"processId\":201,\"solutionId\":502}]}"), 400, "VALIDATION_ERROR");
+	}
+
+	private static List<Long> solutionIds(JsonNode candidates) {
+		return candidates.values().stream().map(c -> c.path("solutionId").asLong()).toList();
 	}
 
 	private static JsonNode find(JsonNode candidates, long solutionId) {

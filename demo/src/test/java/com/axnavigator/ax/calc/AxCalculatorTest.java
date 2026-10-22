@@ -6,6 +6,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
@@ -18,7 +19,10 @@ import org.junit.jupiter.api.Test;
 import com.axnavigator.ax.calc.CalcInputs.CompanyInput;
 import com.axnavigator.ax.calc.CalcInputs.MetricInput;
 import com.axnavigator.ax.calc.CalcResults.BaseValues;
+import com.axnavigator.ax.calc.CalcInputs.ProcessInput;
+import com.axnavigator.ax.calc.CalcResults.CandidateKey;
 import com.axnavigator.ax.calc.CalcResults.CandidateScore;
+import com.axnavigator.ax.calc.CalcResults.Match;
 import com.axnavigator.ax.calc.CalcResults.Evaluation;
 import com.axnavigator.ax.calc.CalcResults.PortfolioResult;
 import com.axnavigator.ax.calc.CalcResults.Scenario;
@@ -105,9 +109,9 @@ class AxCalculatorTest {
 		Map<Long, List<MetricInput>> byProcess = company.metrics()
 			.stream()
 			.collect(Collectors.groupingBy(MetricInput::processId));
-		Map<Long, Long> processOfSolution = company.solutions()
+		Map<Long, Long> processOfSolution = AxCalculator.matches(company, policy)
 			.stream()
-			.collect(Collectors.toMap(CalcInputs.SolutionInput::solutionId, CalcInputs.SolutionInput::targetProcessId));
+			.collect(Collectors.toMap(m -> m.solution().solutionId(), Match::processId));
 		for (JsonNode d : expected.path("calculation_details")) {
 			long processId = processOfSolution.get(d.path("solution_id").asLong());
 			BaseValues base = AxCalculator.baseValues(processId, byProcess.get(processId), AS_OF);
@@ -142,7 +146,7 @@ class AxCalculatorTest {
 		assertThat(result.validCombinations()).isEqualTo(expected.path("valid_combinations").asInt());
 
 		JsonNode runnerUp = expected.path("runner_up");
-		assertThat(result.runnerUp().solutionIds()).isEqualTo(longs(runnerUp.path("solution_ids")));
+		assertThat(solutionIds(result.runnerUp().candidates())).isEqualTo(longs(runnerUp.path("solution_ids")));
 		assertDecimal(result.runnerUp().totalAxScore(), runnerUp.path("total_ax_score"), "runnerUp");
 		assertDecimal(result.totalAxScore().subtract(result.runnerUp().totalAxScore()),
 				expected.path("runner_up_score_gap"), "runnerUp gap");
@@ -163,7 +167,7 @@ class AxCalculatorTest {
 				policy.maxItems());
 		JsonNode greedy = expected.path("greedy_top3_by_score");
 
-		assertThat(result.greedyTop3().solutionIds()).isEqualTo(longs(greedy.path("solution_ids")));
+		assertThat(solutionIds(result.greedyTop3().candidates())).isEqualTo(longs(greedy.path("solution_ids")));
 		assertDecimal(result.greedyTop3().totalAxScore(), greedy.path("total_ax_score"), "greedy total");
 		assertThat(result.greedyTop3().totalFirstYearTcoKrw())
 			.isEqualTo(greedy.path("total_first_year_tco_krw").asLong());
@@ -174,7 +178,7 @@ class AxCalculatorTest {
 	@Test
 	void requestedCandidatesDoNotRenormalizeImpact() {
 		Evaluation evaluation = AxCalculator.evaluate(company, policy, AS_OF);
-		PortfolioResult subset = AxCalculator.optimize(evaluation, List.of(501L, 502L, 504L, 509L), 3);
+		PortfolioResult subset = AxCalculator.optimize(evaluation, seedKeys(501, 502, 504, 509), 3);
 		CandidateScore full504 = evaluation.eligible().stream().filter(c -> c.solutionId() == 504).findFirst().get();
 		CandidateScore subset504 = subset.selected().stream().filter(c -> c.solutionId() == 504).findFirst().get();
 
@@ -216,12 +220,12 @@ class AxCalculatorTest {
 	void dependentSolutionWithoutPrerequisiteIsRejected() {
 		Evaluation evaluation = AxCalculator.evaluate(company, policy, AS_OF);
 
-		PortfolioResult only508 = AxCalculator.optimize(evaluation, List.of(508L), 1);
+		PortfolioResult only508 = AxCalculator.optimize(evaluation, seedKeys(508), 1);
 		assertThat(only508.insufficient()).isTrue();
 		assertThat(only508.selected()).isEmpty();
 		assertThat(only508.greedyTop3().violations()).containsExactly(AxCalculator.MISSING_DEPENDENCY);
 
-		PortfolioResult with509 = AxCalculator.optimize(evaluation, List.of(508L, 509L), 2);
+		PortfolioResult with509 = AxCalculator.optimize(evaluation, seedKeys(508, 509), 2);
 		assertThat(with509.insufficient()).isFalse();
 		assertThat(with509.selected().stream().map(CandidateScore::solutionId)).containsExactly(508L, 509L);
 	}
@@ -277,6 +281,75 @@ class AxCalculatorTest {
 		assertThat(AxCalculator.combinations(List.of(1, 2, 3, 4), 2)).containsExactly(List.of(1, 2), List.of(1, 3),
 				List.of(1, 4), List.of(2, 3), List.of(2, 4), List.of(3, 4));
 		assertThat(AxCalculator.combinations(List.of(1, 2), 3)).isEmpty();
+	}
+
+	@Test
+	void seedTemplatesMatchOneProcessEach() {
+		List<Match> matches = AxCalculator.matches(company, policy);
+
+		assertThat(matches).extracting(m -> m.solution().solutionId())
+			.containsExactly(501L, 502L, 503L, 504L, 505L, 506L, 507L, 508L, 509L);
+		assertThat(matches).allSatisfy(m -> assertThat(m.processId()).isEqualTo(m.solution().solutionId() - 300));
+		assertThat(matches).filteredOn(m -> m.processId() == 203).singleElement()
+			.satisfies(m -> assertThat(m.excludedReason()).isNotBlank());
+		assertThat(matches).filteredOn(m -> m.processId() == 208).singleElement()
+			.satisfies(m -> assertThat(m.dependsOn()).isEqualTo(new CandidateKey(209, 509)));
+	}
+
+	@Test
+	void oneTemplateAppliesToEveryProcessOfItsType() {
+		// 210: 201과 같은 부서, 같은 유형(KNOWLEDGE_QA), 같은 지표
+		CompanyInput twice = withProcess(new ProcessInput(210, 101, new BigDecimal("0.88"), false, "KNOWLEDGE_QA"), 201);
+		Evaluation evaluation = AxCalculator.evaluate(twice, policy, AS_OF);
+
+		assertThat(evaluation.eligible()).filteredOn(c -> c.solutionId() == 501)
+			.extracting(CandidateScore::processId)
+			.containsExactly(201L, 210L);
+		PortfolioResult result = AxCalculator.optimize(evaluation, List.of(new CandidateKey(201, 501),
+				new CandidateKey(210, 501)), 2);
+		assertThat(result.insufficient()).isFalse();
+		assertThat(result.selected()).extracting(CandidateScore::processId).containsExactly(201L, 210L);
+	}
+
+	@Test
+	void prerequisiteMustBeInTheSameDepartment() {
+		// 101 부서에는 DOC_AUTHORING 업무가 없으므로 101 부서의 CODE_REVIEW 업무는 후보가 아니다
+		CompanyInput other = withProcess(new ProcessInput(210, 101, new BigDecimal("0.9"), true, "CODE_REVIEW"), 208);
+
+		assertThat(AxCalculator.matches(other, policy)).extracting(Match::processId).doesNotContain(210L).contains(208L);
+	}
+
+	@Test
+	void otherOrUnclassifiedProcessesAreNotMatched() {
+		CompanyInput other = withProcess(new ProcessInput(210, 101, new BigDecimal("0.9"), false, "OTHER"), 201);
+		CompanyInput unclassified = withProcess(new ProcessInput(211, 101, new BigDecimal("0.9"), false, null), 201);
+
+		assertThat(AxCalculator.matches(other, policy)).extracting(Match::processId).doesNotContain(210L);
+		assertThat(AxCalculator.matches(unclassified, policy)).extracting(Match::processId).doesNotContain(211L);
+	}
+
+	/** 시드 회사에 업무 하나를 더하고 source 업무의 지표를 복사한다. */
+	private static CompanyInput withProcess(ProcessInput process, long source) {
+		List<ProcessInput> processes = new ArrayList<>(company.processes());
+		processes.add(process);
+		List<MetricInput> metrics = new ArrayList<>(company.metrics());
+		company.metrics()
+			.stream()
+			.filter(m -> m.processId() == source)
+			.map(m -> new MetricInput(m.metricId() + 1000, process.processId(), m.periodStart(), m.periodEnd(),
+					m.processingCount(), m.avgProcessingMinutes(), m.errorRate(), m.hourlyLaborCostKrw(), m.dataSource()))
+			.forEach(metrics::add);
+		return new CompanyInput(company.companyId(), null, processes, metrics, company.systems(), company.links(),
+				company.solutions());
+	}
+
+	/** 시드 회사의 솔루션 50x는 업무 20x에 붙는다. */
+	private static List<CandidateKey> seedKeys(long... solutionIds) {
+		return Arrays.stream(solutionIds).mapToObj(id -> new CandidateKey(id - 300, id)).toList();
+	}
+
+	private static List<Long> solutionIds(List<CandidateKey> keys) {
+		return keys.stream().map(CandidateKey::solutionId).toList();
 	}
 
 	private static void assertScenario(Scenario actual, JsonNode expected, String at) {

@@ -33,7 +33,7 @@ public final class CompanyDtos {
 
 	public record ProcessResponse(Long processId, Long departmentId, String departmentName, String processName,
 			String purpose, JsonNode processSteps, BigDecimal standardizationLevel, boolean requiresApproval,
-			String exceptionRules) {
+			String exceptionRules, WorkType workType) {
 	}
 
 	public record MetricMonth(Long metricId, LocalDate periodStart, LocalDate periodEnd, Integer processingCount,
@@ -61,8 +61,8 @@ public final class CompanyDtos {
 	public record BudgetResponse(Long companyId, Long axBudgetKrw) {
 	}
 
-	/** 카탈로그 전체. 비율은 0~1 숫자. */
-	public record SolutionResponse(Long solutionId, Long targetProcessId, Long dependsOnSolutionId,
+	/** 솔루션 템플릿 전체. 같은 workType의 업무에 적용한다. 비율은 0~1 숫자. */
+	public record SolutionResponse(Long solutionId, WorkType workType, Long dependsOnSolutionId,
 			SolutionType solutionType, String solutionName, String description, Long baseBuildCostKrw,
 			Long monthlyRunCostKrw, BigDecimal automationRateLow, BigDecimal automationRateBase,
 			BigDecimal automationRateHigh, BigDecimal timeReductionRateLow, BigDecimal timeReductionRateBase,
@@ -70,7 +70,7 @@ public final class CompanyDtos {
 			DataSourceType dataSource) {
 
 		static SolutionResponse from(AiSolution s) {
-			return new SolutionResponse(s.getSolutionId(), s.getTargetProcessId(), s.getDependsOnSolutionId(),
+			return new SolutionResponse(s.getSolutionId(), s.getWorkType(), s.getDependsOnSolutionId(),
 					s.getSolutionType(), s.getSolutionName(), s.getDescription(), s.getBaseBuildCostKrw(),
 					s.getMonthlyRunCostKrw(), s.getAutomationRateLow(), s.getAutomationRateBase(),
 					s.getAutomationRateHigh(), s.getTimeReductionRateLow(), s.getTimeReductionRateBase(),

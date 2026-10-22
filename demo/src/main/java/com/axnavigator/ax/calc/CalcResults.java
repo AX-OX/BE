@@ -5,6 +5,7 @@ import java.time.YearMonth;
 import java.util.List;
 
 import com.axnavigator.ax.calc.CalcInputs.MetricInput;
+import com.axnavigator.ax.calc.CalcInputs.SolutionInput;
 
 /** 계산 결과. 필드명은 기준 문서 §7 응답(camelCase)과 같다. */
 public final class CalcResults {
@@ -33,11 +34,44 @@ public final class CalcResults {
 	public record Scenarios(Scenario low, Scenario base, Scenario high) {
 	}
 
-	/** POST /internal/ax/roi 응답 형식 = 포트폴리오 selected 항목 형식. */
-	public record CandidateScore(long processId, long solutionId, Long dependsOnSolutionId, BigDecimal axScore,
+	/** 후보 식별자. 템플릿 하나가 여러 업무에 붙으므로 solutionId만으로는 후보를 구분할 수 없다. */
+	public record CandidateKey(long processId, long solutionId) {
+	}
+
+	/**
+	 * 업무 유형이 같은 (업무, 템플릿) 쌍. 정책상 제외 업무도 담는다(excludedReason).
+	 * @param dependsOnProcessId 선행 템플릿을 붙인 업무. 선행 템플릿이 없으면 null
+	 */
+	public record Match(long processId, SolutionInput solution, Long dependsOnProcessId, String excludedReason) {
+
+		public CandidateKey key() {
+			return new CandidateKey(processId, solution.solutionId());
+		}
+
+		public CandidateKey dependsOn() {
+			return dependsOnProcessId == null ? null : new CandidateKey(dependsOnProcessId, solution.dependsOnSolutionId());
+		}
+
+	}
+
+	/**
+	 * POST /internal/ax/roi 응답 형식 = 포트폴리오 selected 항목 형식.
+	 * 선행 후보는 (dependsOnProcessId, dependsOnSolutionId)다.
+	 */
+	public record CandidateScore(long processId, long solutionId, Long dependsOnSolutionId, Long dependsOnProcessId,
+			BigDecimal axScore,
 			BigDecimal impactScore, BigDecimal feasibilityScore, BigDecimal savedHoursBase, boolean apiOk,
 			boolean humanReviewRequired, DataConfidence dataConfidence, List<String> warnings,
 			long firstYearTcoKrw, Scenarios scenarios) {
+
+		public CandidateKey key() {
+			return new CandidateKey(processId, solutionId);
+		}
+
+		public CandidateKey dependsOn() {
+			return dependsOnSolutionId == null ? null : new CandidateKey(dependsOnProcessId, dependsOnSolutionId);
+		}
+
 	}
 
 	public record Exclusion(long processId, String reason) {
@@ -45,22 +79,27 @@ public final class CalcResults {
 
 	/** 최근 3개월 지표가 부족해 선정 가능 후보에서 빠진 후보. */
 	public record InsufficientCandidate(long processId, long solutionId, List<YearMonth> missingMonths) {
+
+		public CandidateKey key() {
+			return new CandidateKey(processId, solutionId);
+		}
+
 	}
 
 	/**
 	 * 기업 단위 평가 결과.
-	 * @param eligible 선정 가능 후보 (solutionId 오름차순)
+	 * @param eligible 선정 가능 후보 (solutionId, processId 오름차순)
 	 * @param maxSavedHours Impact 정규화 기준 (선정 가능 후보 전체의 saved_hours 최대값)
 	 */
 	public record Evaluation(long companyId, Long budgetKrw, List<CandidateScore> eligible,
 			List<Exclusion> excluded, List<InsufficientCandidate> insufficient, BigDecimal maxSavedHours) {
 	}
 
-	public record RunnerUp(List<Long> solutionIds, BigDecimal totalAxScore) {
+	public record RunnerUp(List<CandidateKey> candidates, BigDecimal totalAxScore) {
 	}
 
 	/** violations: BUDGET_EXCEEDED, MISSING_DEPENDENCY, DUPLICATE_PROCESS. 복수 위반은 모두, 없으면 빈 배열. */
-	public record GreedyTop(List<Long> solutionIds, BigDecimal totalAxScore, long totalFirstYearTcoKrw,
+	public record GreedyTop(List<CandidateKey> candidates, BigDecimal totalAxScore, long totalFirstYearTcoKrw,
 			List<String> violations) {
 	}
 

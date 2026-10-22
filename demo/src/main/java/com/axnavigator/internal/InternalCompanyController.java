@@ -19,6 +19,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.axnavigator.ax.AxCalcService;
+import com.axnavigator.ax.AxCalcService.SolutionCandidate;
 import com.axnavigator.company.CompanyDtos.BudgetResponse;
 import com.axnavigator.company.CompanyDtos.CompanyResponse;
 import com.axnavigator.company.CompanyDtos.ProcessMetricsResponse;
@@ -43,8 +45,11 @@ public class InternalCompanyController {
 
 	private final CompanyQueryService service;
 
-	public InternalCompanyController(CompanyQueryService service) {
+	private final AxCalcService calc;
+
+	public InternalCompanyController(CompanyQueryService service, AxCalcService calc) {
 		this.service = service;
+		this.calc = calc;
 	}
 
 	@Operation(summary = "기업 및 부서 조회", description = "기업의 기본 정보와 소속 부서 목록을 반환합니다. 내부 응답의 담당자 이메일과 전화번호는 마스킹하지 않습니다.")
@@ -79,7 +84,13 @@ public class InternalCompanyController {
 		return service.budget(companyId);
 	}
 
-	@Operation(summary = "AI 솔루션 카탈로그 조회", description = "솔루션의 대상 업무, 선행 솔루션, 구축비와 운영비, 시나리오별 자동화율 및 시간 절감률을 반환합니다. 비율은 0~1이며 비용은 원(KRW) 단위입니다.")
+	@Operation(summary = "솔루션 후보 조회", description = "업무 유형(workType)이 같은 업무와 솔루션 템플릿의 쌍을 반환합니다. 선행 템플릿은 같은 부서 업무에 붙이며, 붙일 업무가 없으면 후보에서 뺍니다. 정책상 제외 업무는 excludedReason, 최근 3개 완료 월 지표가 부족하면 metricsSufficient=false입니다.")
+	@GetMapping("/companies/{companyId}/solution-candidates")
+	public List<SolutionCandidate> solutionCandidates(@Parameter(description = "기업 ID", example = "1") @PathVariable Long companyId) {
+		return calc.candidates(companyId);
+	}
+
+	@Operation(summary = "AI 솔루션 템플릿 조회", description = "업무 유형별 솔루션 템플릿의 적용 유형, 선행 템플릿, 구축비와 운영비, 시나리오별 자동화율 및 시간 절감률을 반환합니다. 비율은 0~1이며 비용은 원(KRW) 단위입니다.")
 	@GetMapping("/solutions")
 	public List<SolutionResponse> solutions() {
 		return service.solutions();

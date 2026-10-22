@@ -14,7 +14,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
-/** ai_solution_catalog (ROI 가정값, LLM이 만들지 않음). */
+/** ai_solution_catalog. 업무 유형별 솔루션 템플릿 (ROI 가정값, LLM이 만들지 않음). */
 @Entity
 @Table(name = "ai_solution_catalog")
 @Getter
@@ -27,8 +27,9 @@ public class AiSolution {
 	@Column(name = "solution_id")
 	private Long solutionId;
 
-	@Column(name = "target_process_id", nullable = false)
-	private Long targetProcessId;
+	@Enumerated(EnumType.STRING)
+	@Column(name = "work_type", nullable = false, length = 30)
+	private WorkType workType;
 
 	@Column(name = "depends_on_solution_id")
 	private Long dependsOnSolutionId;

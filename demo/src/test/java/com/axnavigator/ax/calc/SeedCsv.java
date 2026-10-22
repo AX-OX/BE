@@ -38,7 +38,8 @@ final class SeedCsv {
 		List<ProcessInput> processes = table("business_processes").stream()
 			.filter(r -> departmentIds.contains(Long.parseLong(r.get("department_id"))))
 			.map(r -> new ProcessInput(Long.parseLong(r.get("process_id")), Long.parseLong(r.get("department_id")),
-					decimal(r.get("standardization_level")), bool(r.get("requires_approval"))))
+					decimal(r.get("standardization_level")), bool(r.get("requires_approval")),
+					r.get("work_type").isEmpty() ? null : r.get("work_type")))
 			.toList();
 		Set<Long> processIds = processes.stream().map(ProcessInput::processId).collect(Collectors.toSet());
 		List<MetricInput> metrics = table("process_metrics").stream()
@@ -58,9 +59,7 @@ final class SeedCsv {
 			.map(r -> new LinkInput(Long.parseLong(r.get("process_id")), Long.parseLong(r.get("system_id"))))
 			.toList();
 		List<SolutionInput> solutions = table("ai_solution_catalog").stream()
-			.filter(r -> processIds.contains(Long.parseLong(r.get("target_process_id"))))
-			.map(r -> new SolutionInput(Long.parseLong(r.get("solution_id")),
-					Long.parseLong(r.get("target_process_id")),
+			.map(r -> new SolutionInput(Long.parseLong(r.get("solution_id")), r.get("work_type"),
 					r.get("depends_on_solution_id").isEmpty() ? null : Long.parseLong(r.get("depends_on_solution_id")),
 					Long.parseLong(r.get("base_build_cost_krw")), Long.parseLong(r.get("monthly_run_cost_krw")),
 					decimal(r.get("automation_rate_low")), decimal(r.get("automation_rate_base")),

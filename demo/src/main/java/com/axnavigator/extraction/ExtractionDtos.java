@@ -5,6 +5,7 @@ import java.util.List;
 import com.axnavigator.company.DataAccessLevel;
 import com.axnavigator.company.DataSourceType;
 import com.axnavigator.company.SystemType;
+import com.axnavigator.company.WorkType;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
@@ -39,6 +40,7 @@ public final class ExtractionDtos {
         @DecimalMin("0") @DecimalMax("1") @Digits(integer = 1, fraction = 2) @Schema(example = "0.8") BigDecimal standardizationLevel,
         @NotNull Boolean requiresApproval,
         String exceptionRules,
+        @NotNull @Schema(description = "업무 유형. 같은 유형의 솔루션 템플릿과 매칭하며 OTHER는 매칭하지 않는다", example = "KNOWLEDGE_QA") WorkType workType,
         @Valid Source source) {}
 
     /** 월평균 1건. 확정 시 계산 기준일의 최근 3개 완료 월에 같은 값으로 저장한다. */

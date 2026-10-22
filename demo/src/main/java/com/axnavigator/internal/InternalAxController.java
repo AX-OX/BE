@@ -31,7 +31,7 @@ import jakarta.validation.constraints.Positive;
 @Tag(name = "AX 투자 분석", description = "정책과 업무 지표에 따른 AX점수·ROI 계산 및 예산 내 과제 선정")
 @SecurityRequirement(name = "InternalToken")
 @ApiResponses({
-    @ApiResponse(responseCode = "400", description = "입력 오류, 대상 업무 불일치, 제외 업무 또는 지표 부족. code와 hint로 상세 원인 확인", content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+    @ApiResponse(responseCode = "400", description = "입력 오류, 업무와 솔루션 유형 불일치, 제외 업무 또는 지표 부족. code와 hint로 상세 원인 확인", content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
     @ApiResponse(responseCode = "403", description = "내부 토큰 누락 또는 불일치", content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
     @ApiResponse(responseCode = "404", description = "기업·업무·솔루션을 찾을 수 없음", content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
 })
@@ -45,7 +45,7 @@ public class InternalAxController {
 		this.calc = calc;
 	}
 
-	public record RoiRequest(@Schema(description = "업무 ID", example = "207") @NotNull Long processId, @Schema(description = "업무에 대응하는 솔루션 ID", example = "507") @NotNull Long solutionId) {
+	public record RoiRequest(@Schema(description = "업무 ID", example = "207") @NotNull Long processId, @Schema(description = "업무와 유형이 같은 솔루션 템플릿 ID", example = "507") @NotNull Long solutionId) {
 	}
 
 	public record PortfolioRequest(@Schema(description = "기업 ID", example = "1") @NotNull Long companyId, @Schema(description = "검토할 후보. 생략하거나 빈 배열이면 기업의 선정 가능 후보 전체") List<CandidateRef> candidates, @Schema(description = "선정할 과제 수. 기본 3, 1 이상", example = "3") Integer maxItems, @Schema(description = "예산(원). 생략하면 예산 제약 없이 선정", example = "300000000") @Positive Long budgetKrw) {
