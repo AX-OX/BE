@@ -181,9 +181,13 @@ cd demo
 | GET | `/api/ai/tasks?mine=true` | `[{taskId, status, requestText, createdAt, completedAt}]`, 최신순 |
 | GET | `/api/ai/tasks/{taskId}/stream` | `text/event-stream` |
 | POST | `/api/ai/tasks/{taskId}/approval` | `{decision: "APPROVE" 또는 "REJECT", reason?}` → 202 |
-| GET | `/api/docs/{documentId}` | `{documentId, title, docType, accessLevel, version, content}` |
+| GET | `/api/docs/{documentId}` | `{documentId, title, docType, accessLevel, version, content, pages}` |
+| POST | `/api/documents` | multipart `file`(PDF) → 201 `{documentId, status: "UPLOADED"}` |
+| GET | `/api/documents` | `[{documentId, title, docType, status, fileSize, pageCount, createdAt}]`, 최신순 |
 
-작업 생성의 userId·companyId는 JWT에서 가져오며 요청 본문으로 지정하지 않는다. 조회·SSE·승인은 요청자 본인만 가능하다(다른 사용자 403). 문서는 JWT와 같은 기업의 원문만 제공하며 이메일·전화번호를 마스킹한다. 원문은 `AX_DOCS_DIR/{documentId}.md`에서 읽으며 DB의 fileUri로 임의 경로를 열지 않는다.
+작업 생성의 userId·companyId는 JWT에서 가져오며 요청 본문으로 지정하지 않는다. 조회·SSE·승인은 요청자 본인만 가능하다(다른 사용자 403). 문서는 JWT와 같은 기업의 원문만 제공하며 이메일·전화번호를 마스킹한다. 시드 문서 원문은 `AX_DOCS_DIR/{documentId}.md`에서 읽으며 DB의 fileUri로 임의 경로를 열지 않는다. 업로드 문서(`docType=UPLOADED`)는 AI가 돌려준 페이지 텍스트를 `pages`와 이를 이은 `content`로 반환하고, 색인 전이면 409다.
+
+PDF 업로드는 JWT 기업의 문서로 등록한다. PDF 시그니처(`%PDF-`)로 형식을 확인하고 20MB, 기업당 20개(FAILED 제외)까지 받는다. 같은 파일(sha256)은 409 `DUPLICATE_DOCUMENT`이며 FAILED 문서는 다시 올릴 수 있다. 원본 파일은 서버에 저장하지 않고 커밋 후 AI 색인 API로 보낸다. FE는 목록 API로 `status`가 `INDEXED` 또는 `FAILED`가 될 때까지 확인한다.
 
 ### 내부 콜백·저장 API (X-Internal-Token)
 
@@ -195,6 +199,9 @@ cd demo
 | POST | `/internal/roadmaps` | `{taskId, companyId, assessmentId?, roadmapName, items}` → `{roadmapId, itemIds}` |
 | POST | `/internal/projects` | `{itemId, ownerDepartmentId, projectName}` → `{projectId}` |
 | PATCH | `/internal/projects/{projectId}/status` | `{status}` → `{projectId, projectStatus}` |
+| PATCH | `/internal/documents/{documentId}` | `{status: INDEXED 또는 FAILED, pageCount?, pages?: [{page, text}], errorMessage?}` → 문서 요약 |
+
+- 문서 색인 결과는 UPLOADED 문서에만 한 번 저장한다(이후 409). INDEXED는 `pageCount`와 1페이지부터 빠짐없는 `pages`가 필요하며 최대 100페이지다. FAILED는 pages 없이 보내고 `errorMessage`는 로그에만 남긴다.
 
 - 상태는 `QUEUED → RUNNING → WAITING_APPROVAL → RUNNING → DONE`이며 실패는 FAILED, 사용자 거절은 REJECTED다. 종료 상태를 RUNNING으로 되돌릴 수 없다. 승인 API만 WAITING_APPROVAL에서 RUNNING·REJECTED로 전환할 수 있다.
 - `result`는 JSON 객체이며 Spring은 `approval` 외의 필드를 해석하지 않고 보관한다. PATCH에서 result를 보내면 통째로 교체하지만 기존 approval은 보존하며, 내부 호출자가 넣은 approval은 무시한다. 필드 생략은 기존 값 유지다.
@@ -220,6 +227,7 @@ cd demo
 
 - `POST /tasks/{taskId}/run`: `{companyId, userId, requestText}`
 - `POST /tasks/{taskId}/resume`: `{decision, userId, reason}`
+- `POST /documents/{documentId}/ingest`: multipart `{companyId, fileName, contentType, file}`. 색인 결과는 `PATCH /internal/documents/{documentId}`로 돌려준다. 호출이 실패하면 문서는 FAILED가 된다.
 
 호출 시 X-Internal-Token을 전달하고 연결 제한 5초·응답 제한 10초를 적용한다. 전송 실패 시 작업은 FAILED로 저장하고 SSE에 오류를 알린다. 사용자 거절은 resume 실패에도 REJECTED를 유지한다. 자동 재전송 큐·RabbitMQ·프로세스 재시작 시 작업 복구는 이번 범위에 포함하지 않는다.
 
