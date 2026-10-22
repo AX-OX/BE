@@ -1,6 +1,6 @@
 -- ============================================================
 -- AX Navigator AI — MVP Schema (PostgreSQL 16)
--- 15 tables · 업무 DB(ax)
+-- 16 tables · 업무 DB(ax)
 -- * 문서 chunk·임베딩은 같은 ax DB의 pgvector에 저장 (아래 RAG 확장 DDL에 별도 정의)
 -- * LangGraph checkpointer는 별도 DB(agent)에 자동 생성
 -- * ERD 도구 호환을 위해 PK는 BIGINT로 선언.
@@ -86,7 +86,7 @@ CREATE TABLE documents (
     company_id          BIGINT          NOT NULL,
     process_id          BIGINT,                     -- 공통 문서면 NULL
     title               VARCHAR(200)    NOT NULL,   -- 문서명
-    doc_type            VARCHAR(30)     NOT NULL,   -- MANUAL / POLICY / SYSTEM_SPEC / AI_STATUS / DATA_QUALITY / PROJECT_REPORT
+    doc_type            VARCHAR(30)     NOT NULL,   -- MANUAL / POLICY / SYSTEM_SPEC / AI_STATUS / DATA_QUALITY / PROJECT_REPORT / UPLOADED
     file_uri            VARCHAR(500)    NOT NULL,   -- 원본 경로 (Resource docs://{document_id})
     access_level        VARCHAR(20)     NOT NULL,   -- PUBLIC / INTERNAL / CONFIDENTIAL (민감도 표시용, 검색 권한과 무관)
     version             VARCHAR(20)     NOT NULL DEFAULT 'v1',
@@ -99,6 +99,16 @@ CREATE TABLE documents (
     CONSTRAINT pk_documents PRIMARY KEY (document_id),
     CONSTRAINT fk_documents_company FOREIGN KEY (company_id) REFERENCES companies (company_id),
     CONSTRAINT fk_documents_process FOREIGN KEY (process_id) REFERENCES business_processes (process_id)
+);
+
+CREATE TABLE document_pages (
+    page_id             BIGINT GENERATED ALWAYS AS IDENTITY          NOT NULL,
+    document_id         BIGINT          NOT NULL,
+    page_no             INTEGER         NOT NULL,   -- 1부터 시작
+    content             TEXT            NOT NULL,   -- AI가 추출한 페이지 텍스트 (마스킹 전 원문)
+    CONSTRAINT pk_document_pages PRIMARY KEY (page_id),
+    CONSTRAINT uq_document_pages UNIQUE (document_id, page_no),
+    CONSTRAINT fk_pages_document FOREIGN KEY (document_id) REFERENCES documents (document_id)
 );
 
 
