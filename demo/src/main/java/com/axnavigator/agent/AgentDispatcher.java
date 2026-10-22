@@ -44,6 +44,17 @@ public class AgentDispatcher {
 
     @Async("agentExecutor")
     @TransactionalEventListener
+    public void confirm(TaskSignals.Confirm command) {
+        if (!agent.enabled()) { log.info("Agent disabled: confirmed task {}", command.taskId()); return; }
+        try { agent.confirm(command); }
+        catch (Exception ex) {
+            log.error("Agent confirm failed for task {}", command.taskId(), ex);
+            tasks.dispatchFailed(command.taskId());
+        }
+    }
+
+    @Async("agentExecutor")
+    @TransactionalEventListener
     public void ingest(DocumentSignals.Ingest command) {
         if (!agent.enabled()) { log.info("Agent disabled: uploaded document {}", command.documentId()); return; }
         try { agent.ingest(command); }

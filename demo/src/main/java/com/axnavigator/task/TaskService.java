@@ -6,6 +6,9 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import com.axnavigator.common.*;
+import com.axnavigator.company.DepartmentRepository;
+import com.axnavigator.doc.*;
+import com.axnavigator.extraction.*;
 import com.axnavigator.task.TaskDtos.*;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.node.ObjectNode;
@@ -13,12 +16,17 @@ import tools.jackson.databind.node.ObjectNode;
 @Service
 public class TaskService {
     private final AiTaskRepository tasks;
+    private final DepartmentRepository departments;
+    private final DocumentRepository documents;
+    private final ExtractionDraftRepository drafts;
     private final JsonSupport json;
     private final ApplicationEventPublisher events;
     private final ZoneId zone;
 
-    public TaskService(AiTaskRepository tasks, JsonSupport json, ApplicationEventPublisher events, AxProperties properties) {
-        this.tasks = tasks; this.json = json; this.events = events; this.zone = ZoneId.of(properties.timeZone());
+    public TaskService(AiTaskRepository tasks, DepartmentRepository departments, DocumentRepository documents, ExtractionDraftRepository drafts,
+            JsonSupport json, ApplicationEventPublisher events, AxProperties properties) {
+        this.tasks = tasks; this.departments = departments; this.documents = documents; this.drafts = drafts;
+        this.json = json; this.events = events; this.zone = ZoneId.of(properties.timeZone());
     }
 
     @Transactional
@@ -28,7 +36,11 @@ public class TaskService {
         task.setRequestText(request.requestText()); task.setStatus(TaskStatus.QUEUED);
         tasks.saveAndFlush(task);
         // Agent는 DB 커밋 이후 호출한다. 202 접수와 외부 HTTP 실행을 분리한다.
-        events.publishEvent(new TaskSignals.Run(task.getTaskId(), companyId, userId, request.requestText()));
+        // 부서가 없으면 아직 기업 데이터를 확정하지 않은 것이다. Agent는 색인 완료 문서에서 먼저 추출한다.
+        boolean confirmed = departments.existsByCompanyId(companyId);
+        List<Long> documentIds = confirmed ? List.of() : documents.findByCompanyIdAndStatusOrderByDocumentId(companyId, DocumentStatus.INDEXED)
+            .stream().map(Document::getDocumentId).toList();
+        events.publishEvent(new TaskSignals.Run(task.getTaskId(), companyId, userId, request.requestText(), confirmed, documentIds));
         return new Created(task.getTaskId());
     }
 
@@ -86,6 +98,11 @@ public class TaskService {
         if (!taskId.equals(event.taskId())) throw ApiException.validation("경로와 이벤트의 taskId가 일치해야 합니다.");
         if (!event.data().isObject()) throw ApiException.validation("이벤트 data는 JSON 객체여야 합니다.");
         switch (event.type()) {
+            case CONFIRMATION_REQUIRED -> {
+                if (drafts.findByTaskId(taskId).filter(d -> d.getStatus() == DraftStatus.DRAFT).isEmpty())
+                    throw ApiException.invalidState("추출 결과를 먼저 저장해야 확정을 요청할 수 있습니다.");
+                transition(task, TaskStatus.WAITING_CONFIRMATION);
+            }
             case APPROVAL_REQUIRED -> transition(task, TaskStatus.WAITING_APPROVAL);
             case DONE -> {
                 // DONE 이벤트의 결과도 동일한 승인 보존 규칙으로 저장한다.
@@ -125,6 +142,12 @@ public class TaskService {
         if (!task.getUserId().equals(userId) || !task.getCompanyId().equals(companyId)) throw ApiException.forbidden("본인이 요청한 작업만 접근할 수 있습니다.");
         return task;
     }
+    /** 사용자 확정 API만 WAITING_CONFIRMATION에서 RUNNING으로 바꾸고 Agent를 재개한다. */
+    public void confirmed(AiTask task) {
+        if (task.getStatus() != TaskStatus.WAITING_CONFIRMATION) throw ApiException.invalidState("확정 대기 중인 작업만 확정할 수 있습니다.");
+        task.setStatus(TaskStatus.RUNNING);
+        events.publishEvent(new TaskSignals.Confirm(task.getTaskId(), task.getUserId()));
+    }
     public static boolean terminal(TaskStatus status) { return status == TaskStatus.DONE || status == TaskStatus.FAILED || status == TaskStatus.REJECTED; }
     public Detail snapshot(AiTask task) { return new Detail(task.getTaskId(), task.getStatus(), json.read(task.getResult()), task.getTraceUrl()); }
     private ObjectNode resultObject(JsonNode value) {
@@ -137,8 +160,8 @@ public class TaskService {
         if (current == next) return;
         boolean valid = switch (current) {
             case QUEUED -> next == TaskStatus.RUNNING || next == TaskStatus.FAILED;
-            case RUNNING -> next == TaskStatus.WAITING_APPROVAL || next == TaskStatus.DONE || next == TaskStatus.FAILED;
-            case WAITING_APPROVAL -> next == TaskStatus.FAILED;
+            case RUNNING -> next == TaskStatus.WAITING_CONFIRMATION || next == TaskStatus.WAITING_APPROVAL || next == TaskStatus.DONE || next == TaskStatus.FAILED;
+            case WAITING_CONFIRMATION, WAITING_APPROVAL -> next == TaskStatus.FAILED;
             default -> false;
         };
         if (!valid) throw ApiException.invalidState("허용되지 않은 작업 상태 변경입니다: " + current + " → " + next);
