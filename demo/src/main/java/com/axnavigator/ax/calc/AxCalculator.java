@@ -23,12 +23,14 @@ import com.axnavigator.ax.calc.CalcInputs.ProcessInput;
 import com.axnavigator.ax.calc.CalcInputs.SolutionInput;
 import com.axnavigator.ax.calc.CalcInputs.SystemInput;
 import com.axnavigator.ax.calc.CalcResults.BaseValues;
+import com.axnavigator.ax.calc.CalcResults.CandidateKey;
 import com.axnavigator.ax.calc.CalcResults.CandidateScore;
 import com.axnavigator.ax.calc.CalcResults.CandidateWarning;
 import com.axnavigator.ax.calc.CalcResults.Evaluation;
 import com.axnavigator.ax.calc.CalcResults.Exclusion;
 import com.axnavigator.ax.calc.CalcResults.GreedyTop;
 import com.axnavigator.ax.calc.CalcResults.InsufficientCandidate;
+import com.axnavigator.ax.calc.CalcResults.Match;
 import com.axnavigator.ax.calc.CalcResults.PortfolioResult;
 import com.axnavigator.ax.calc.CalcResults.RunnerUp;
 import com.axnavigator.ax.calc.CalcResults.Scenario;
@@ -47,6 +49,13 @@ public final class AxCalculator {
 
 	// 같은 업무의 후보가 둘 이상인 단순 상위 조합의 제약 위반 사유.
 	public static final String DUPLICATE_PROCESS = "DUPLICATE_PROCESS";
+
+	/** 매칭하지 않는 업무 유형. */
+	public static final String OTHER = "OTHER";
+
+	private static final Comparator<CandidateScore> CANDIDATE_ORDER = Comparator
+		.comparingLong(CandidateScore::solutionId)
+		.thenComparingLong(CandidateScore::processId);
 
 	/** 나눗셈 정밀도. 중간값은 반올림하지 않고 이 유효 자릿수로만 유지한다. */
 	private static final MathContext MC = MathContext.DECIMAL128;
@@ -134,6 +143,52 @@ public final class AxCalculator {
 	// AX점수 · 보조 지표
 	// ------------------------------------------------------------------
 
+	/**
+	 * 업무 유형이 같은 (업무, 템플릿) 쌍을 만든다. OTHER나 유형이 없는 업무는 매칭하지 않는다.
+	 * 선행 템플릿은 같은 부서의 제외되지 않은 업무 중 그 유형인 첫 업무(processId 최소)에 붙인다.
+	 * 붙일 업무가 없거나 그 선행 쌍도 후보가 아니면 그 쌍은 후보가 아니다. 결과는 solutionId, processId 오름차순이다.
+	 */
+	public static List<Match> matches(CompanyInput input, AxPolicy policy) {
+		Map<Long, SolutionInput> templates = input.solutions()
+			.stream()
+			.collect(Collectors.toMap(SolutionInput::solutionId, Function.identity()));
+		List<ProcessInput> processes = input.processes()
+			.stream()
+			.filter(p -> p.workType() != null && !OTHER.equals(p.workType()))
+			.sorted(Comparator.comparingLong(ProcessInput::processId))
+			.toList();
+		List<Match> matches = new ArrayList<>();
+		for (SolutionInput s : input.solutions()) {
+			for (ProcessInput p : processes) {
+				if (!p.workType().equals(s.workType())) {
+					continue;
+				}
+				Long dependsOn = null;
+				if (s.dependsOnSolutionId() != null) {
+					SolutionInput required = templates.get(s.dependsOnSolutionId());
+					dependsOn = required == null ? null : processes.stream()
+						.filter(q -> q.departmentId() == p.departmentId() && q.workType().equals(required.workType()))
+						.filter(q -> !policy.exclusions().containsKey(q.processId()))
+						.map(ProcessInput::processId)
+						.findFirst()
+						.orElse(null);
+					if (dependsOn == null) {
+						continue;
+					}
+				}
+				matches.add(new Match(p.processId(), s, dependsOn, policy.exclusions().get(p.processId())));
+			}
+		}
+		// 선행 쌍이 후보에서 빠지면 그 쌍을 선행으로 둔 쌍도 뺀다 (연쇄 선행).
+		boolean changed = true;
+		while (changed) {
+			Set<CandidateKey> keys = matches.stream().map(Match::key).collect(Collectors.toSet());
+			changed = matches.removeIf(m -> m.dependsOn() != null && !keys.contains(m.dependsOn()));
+		}
+		matches.sort(Comparator.comparingLong((Match m) -> m.solution().solutionId()).thenComparingLong(Match::processId));
+		return List.copyOf(matches);
+	}
+
 	/** 기업의 선정 가능 후보 전체를 평가한다. Impact 정규화 max는 이 전체 기준이다. */
 	public static Evaluation evaluate(CompanyInput input, AxPolicy policy, LocalDate asOf) {
 		Map<Long, ProcessInput> processes = input.processes()
@@ -153,41 +208,35 @@ public final class AxCalculator {
 			.map(e -> new Exclusion(e.getKey(), e.getValue()))
 			.toList();
 
-		List<SolutionInput> candidates = input.solutions()
-			.stream()
-			.filter(s -> processes.containsKey(s.targetProcessId()))
-			.filter(s -> !policy.exclusions().containsKey(s.targetProcessId()))
-			.sorted(Comparator.comparingLong(SolutionInput::solutionId))
-			.toList();
+		List<Match> candidates = matches(input, policy).stream().filter(m -> m.excludedReason() == null).toList();
 
 		Map<Long, BaseValues> bases = new LinkedHashMap<>();
 		List<InsufficientCandidate> insufficient = new ArrayList<>();
-		List<SolutionInput> eligible = new ArrayList<>();
-		Map<Long, BigDecimal> savedHours = new LinkedHashMap<>();
-		for (SolutionInput s : candidates) {
-			BaseValues base = bases.computeIfAbsent(s.targetProcessId(),
+		List<Match> eligible = new ArrayList<>();
+		Map<CandidateKey, BigDecimal> savedHours = new LinkedHashMap<>();
+		for (Match m : candidates) {
+			BaseValues base = bases.computeIfAbsent(m.processId(),
 					pid -> baseValues(pid, metricsByProcess.getOrDefault(pid, List.of()), asOf));
 			if (!base.sufficient()) {
-				insufficient.add(new InsufficientCandidate(s.targetProcessId(), s.solutionId(), base.missingMonths()));
+				insufficient.add(new InsufficientCandidate(m.processId(), m.solution().solutionId(), base.missingMonths()));
 				continue;
 			}
-			eligible.add(s);
-			savedHours.put(s.solutionId(), savedHours(base.annualHours(), s.automationRateBase(),
-					s.timeReductionRateBase()));
+			eligible.add(m);
+			savedHours.put(m.key(), savedHours(base.annualHours(), m.solution().automationRateBase(),
+					m.solution().timeReductionRateBase()));
 		}
 
 		BigDecimal max = savedHours.values().stream().max(Comparator.naturalOrder()).orElse(BigDecimal.ZERO);
 		List<CandidateScore> scores = new ArrayList<>();
-		for (SolutionInput s : eligible) {
-			ProcessInput process = processes.get(s.targetProcessId());
-			boolean apiOk = !s.requiresApi() || input.links()
+		for (Match m : eligible) {
+			ProcessInput process = processes.get(m.processId());
+			boolean apiOk = !m.solution().requiresApi() || input.links()
 				.stream()
-				.filter(l -> l.processId() == s.targetProcessId())
+				.filter(l -> l.processId() == m.processId())
 				.map(LinkInput::systemId)
 				.map(systems::get)
 				.anyMatch(sys -> sys != null && sys.apiAvailable());
-			scores.add(score(s, process, bases.get(s.targetProcessId()), savedHours.get(s.solutionId()), max, apiOk,
-					policy));
+			scores.add(score(m, process, bases.get(m.processId()), savedHours.get(m.key()), max, apiOk, policy));
 		}
 		return new Evaluation(input.companyId(), input.budgetKrw(), List.copyOf(scores), excluded,
 				List.copyOf(insufficient), max);
@@ -199,8 +248,9 @@ public final class AxCalculator {
 		return annualHours.multiply(automationRate).multiply(timeReductionRate);
 	}
 
-	private static CandidateScore score(SolutionInput s, ProcessInput process, BaseValues base, BigDecimal saved,
+	private static CandidateScore score(Match m, ProcessInput process, BaseValues base, BigDecimal saved,
 			BigDecimal max, boolean apiOk, AxPolicy policy) {
+		SolutionInput s = m.solution();
 		BigDecimal impact = max.signum() > 0 ? saved.multiply(HUNDRED).divide(max, MC) : BigDecimal.ZERO;
 		BigDecimal standardization = process.standardizationLevel() == null ? BigDecimal.ZERO
 				: process.standardizationLevel();
@@ -222,7 +272,7 @@ public final class AxCalculator {
 				scenario(base, s.automationRateBase(), s.timeReductionRateBase(), s, build, annualRun, tco),
 				scenario(base, s.automationRateHigh(), s.timeReductionRateHigh(), s, build, annualRun, tco));
 
-		return new CandidateScore(s.targetProcessId(), s.solutionId(), s.dependsOnSolutionId(),
+		return new CandidateScore(m.processId(), s.solutionId(), s.dependsOnSolutionId(), m.dependsOnProcessId(),
 				round(axScore, policy.scoreScale()), round(impact, 1), round(feasibility, 1), round(saved, 2), apiOk,
 				process.requiresApproval(), base.dataConfidence(), List.copyOf(warnings), money(tco), scenarios);
 	}
@@ -249,29 +299,29 @@ public final class AxCalculator {
 	/**
 	 * 크기 maxItems 조합 전수 탐색. 제약: 초년도 TCO 합 ≤ 예산, 업무 중복 금지, 선행 솔루션 동반.
 	 * 목표: 반올림된 AX점수 합 최대 → 기준 3년 순편익 합 최대 → 초년도 TCO 합 최소.
-	 * @param requestedSolutionIds null 또는 비어 있으면 선정 가능 후보 전체
+	 * @param requestedCandidates null 또는 비어 있으면 선정 가능 후보 전체
 	 */
-	public static PortfolioResult optimize(Evaluation evaluation, Collection<Long> requestedSolutionIds,
+	public static PortfolioResult optimize(Evaluation evaluation, Collection<CandidateKey> requestedCandidates,
 			int maxItems) {
-		boolean all = requestedSolutionIds == null || requestedSolutionIds.isEmpty();
-		Set<Long> requested = all ? Set.of() : new HashSet<>(requestedSolutionIds);
+		boolean all = requestedCandidates == null || requestedCandidates.isEmpty();
+		Set<CandidateKey> requested = all ? Set.of() : new HashSet<>(requestedCandidates);
 		List<CandidateScore> pool = evaluation.eligible()
 			.stream()
-			.filter(c -> all || requested.contains(c.solutionId()))
-			.sorted(Comparator.comparingLong(CandidateScore::solutionId))
+			.filter(c -> all || requested.contains(c.key()))
+			.sorted(CANDIDATE_ORDER)
 			.toList();
 		List<CandidateWarning> warnings = evaluation.insufficient()
 			.stream()
-			.filter(i -> all || requested.contains(i.solutionId()))
+			.filter(i -> all || requested.contains(i.key()))
 			.map(i -> new CandidateWarning(i.processId(), i.solutionId(), INSUFFICIENT_METRICS,
 					i.missingMonths().stream().map(YearMonth::toString).toList()))
 			.toList();
-		long budget = evaluation.budgetKrw();
+		Long budget = evaluation.budgetKrw();
 
 		List<List<CandidateScore>> combinations = combinations(pool, maxItems);
 		List<List<CandidateScore>> valid = new ArrayList<>(
 				combinations.stream().filter(c -> violations(c, budget).isEmpty()).toList());
-		// List.sort는 안정 정렬: 완전 동점이면 조합 생성 순서(solutionId 사전순)를 유지
+		// List.sort는 안정 정렬: 완전 동점이면 조합 생성 순서(solutionId, processId 사전순)를 유지
 		valid.sort(Comparator.comparing(AxCalculator::totalAxScore)
 			.reversed()
 			.thenComparing(Comparator.comparingLong(AxCalculator::totalThreeYearNetBase).reversed())
@@ -280,7 +330,7 @@ public final class AxCalculator {
 		List<CandidateScore> greedy = pool.stream()
 			.sorted(Comparator.comparing(CandidateScore::axScore)
 				.reversed()
-				.thenComparingLong(CandidateScore::solutionId))
+				.thenComparing(CANDIDATE_ORDER))
 			.limit(maxItems)
 			.toList();
 		GreedyTop greedyTop = new GreedyTop(ids(greedy), totalAxScore(greedy), totalTco(greedy),
@@ -294,19 +344,19 @@ public final class AxCalculator {
 		RunnerUp runnerUp = valid.size() > 1
 				? new RunnerUp(ids(valid.get(1)), totalAxScore(valid.get(1))) : null;
 		long tco = totalTco(best);
-		return new PortfolioResult(false, budget, best, totalAxScore(best), tco, budget - tco, combinations.size(),
+		Long remaining = budget == null ? null : budget - tco;
+		return new PortfolioResult(false, budget, best, totalAxScore(best), tco, remaining, combinations.size(),
 				valid.size(), evaluation.excluded(), runnerUp, greedyTop, warnings);
 	}
 
-	/** 조합 제약 위반 사유. 비어 있으면 유효한 조합이다. */
-	public static List<String> violations(List<CandidateScore> combination, long budgetKrw) {
+	/** 조합 제약 위반 사유. 비어 있으면 유효한 조합이다. budgetKrw가 null이면 예산은 검사하지 않는다. */
+	public static List<String> violations(List<CandidateScore> combination, Long budgetKrw) {
 		List<String> violations = new ArrayList<>();
-		if (totalTco(combination) > budgetKrw) {
+		if (budgetKrw != null && totalTco(combination) > budgetKrw) {
 			violations.add(BUDGET_EXCEEDED);
 		}
-		Set<Long> ids = new HashSet<>(ids(combination));
-		if (combination.stream()
-			.anyMatch(c -> c.dependsOnSolutionId() != null && !ids.contains(c.dependsOnSolutionId()))) {
+		Set<CandidateKey> ids = new HashSet<>(ids(combination));
+		if (combination.stream().anyMatch(c -> c.dependsOn() != null && !ids.contains(c.dependsOn()))) {
 			violations.add(MISSING_DEPENDENCY);
 		}
 		if (combination.stream().map(CandidateScore::processId).distinct().count() != combination.size()) {
@@ -337,8 +387,8 @@ public final class AxCalculator {
 		}
 	}
 
-	private static List<Long> ids(List<CandidateScore> combination) {
-		return combination.stream().map(CandidateScore::solutionId).toList();
+	private static List<CandidateKey> ids(List<CandidateScore> combination) {
+		return combination.stream().map(CandidateScore::key).toList();
 	}
 
 	/** 포트폴리오 목표: 반올림된(응답) AX점수의 합. */

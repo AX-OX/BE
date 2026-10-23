@@ -23,8 +23,8 @@ public record AxProperties(
 		@Valid @NotNull Agent agent,
 		@Valid @NotNull Cors cors,
 		@Valid @NotNull Docs docs,
-		@Valid @NotNull Evaluation evaluation,
-		@NotNull Long defaultCompanyId,
+		/** AX_EVALUATION_AS_OF가 비어 있으면 바인딩되지 않아 null이다. */
+		Evaluation evaluation,
 		@NotBlank String timeZone) {
 
 	public record Jwt(@NotBlank String secret, @NotNull Duration ttl) {
@@ -51,7 +51,8 @@ public record AxProperties(
 	public record Docs(@NotBlank String dir) {
 	}
 
-	public record Evaluation(@NotNull LocalDate asOf) {
+	/** asOf가 비어 있으면 오늘(timeZone 기준)을 계산 기준일로 쓴다. */
+	public record Evaluation(LocalDate asOf) {
 	}
 
 }

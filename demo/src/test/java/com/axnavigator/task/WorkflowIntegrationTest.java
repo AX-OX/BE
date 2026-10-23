@@ -63,13 +63,15 @@ class WorkflowIntegrationTest {
         assertThat(request("POST","/api/ai/tasks/"+id+"/approval",Map.of("decision","APPROVE"),token(601),false).statusCode()).isEqualTo(409);
         assertThat(request("PATCH","/internal/tasks/"+id,Map.of("result",Map.of("approval",Map.of("decision","APPROVE"),"marker","before")),null,true).statusCode()).isEqualTo(200);
         assertThat(body(getTask(id,601)).path("result").has("approval")).isFalse();
+        assertThat(request("PATCH","/internal/tasks/"+id,Map.of("budgetKrw",300000000L),null,true).statusCode()).isEqualTo(200);
+        assertThat(tasks.findById(id).orElseThrow().getBudgetKrw()).isEqualTo(300000000L);
 
         var assessment = request("POST","/internal/assessments",Map.of("taskId",id,"scores",Map.of("data",10,"infra",20,"automation",30,"aiCapability",40,"governance",50),"criteriaVersion","v1.0","evidence",List.of(Map.of("documentId",401,"section","평가 근거"))),null,true);
         assertThat(assessment.statusCode()).isEqualTo(200);
         long assessmentId = body(assessment).path("assessmentId").asLong();
         assertThat(assessments.findById(assessmentId).orElseThrow().getTotalScore()).isEqualByComparingTo("28.00");
 
-        JsonNode portfolio = body(request("POST","/internal/ax/portfolio",Map.of("companyId",1),null,true));
+        JsonNode portfolio = body(request("POST","/internal/ax/portfolio",Map.of("companyId",1,"budgetKrw",300000000L),null,true));
         List<Map<String,Object>> itemRequests = roadmapItems(portfolio);
         Map<String,Object> roadmap = new LinkedHashMap<>(Map.of("taskId",id,"companyId",1,"assessmentId",assessmentId,"roadmapName","통합 테스트 로드맵","items",itemRequests));
         assertThat(request("POST","/internal/roadmaps",roadmap,null,true).statusCode()).isEqualTo(409);
@@ -98,6 +100,7 @@ class WorkflowIntegrationTest {
         var stored = roadmaps.findById(saved.path("roadmapId").asLong()).orElseThrow();
         assertThat(stored.getApprovedBy()).isEqualTo(601);
         assertThat(stored.getTotalAllocatedKrw()).isEqualTo(295000000);
+        assertThat(stored.getBudgetLimitKrw()).isEqualTo(300000000L);
         assertThat(Duration.between(stored.getApprovedAt(), OffsetDateTime.parse(approval.path("decidedAt").asString()).toLocalDateTime()).abs()).isLessThan(Duration.ofMillis(1));
 
         for (JsonNode itemId : saved.path("itemIds")) {
@@ -199,7 +202,8 @@ class WorkflowIntegrationTest {
     @Test void roadmapRejectsDuplicateProcessMissingDependencyAndBudgetOverflow() throws Exception {
         String id=create();event(id,"APPROVAL_REQUIRED",Map.of());
         request("POST","/api/ai/tasks/"+id+"/approval",Map.of("decision","APPROVE"),token(601),false);awaitCall(id,"resume");
-        var portfolio=body(request("POST","/internal/ax/portfolio",Map.of("companyId",1),null,true));
+        request("PATCH","/internal/tasks/"+id,Map.of("budgetKrw",300000000L),null,true);
+        var portfolio=body(request("POST","/internal/ax/portfolio",Map.of("companyId",1,"budgetKrw",300000000L),null,true));
         var selected=roadmapItems(portfolio);
         var duplicate = new LinkedHashMap<String,Object>(selected.getFirst());duplicate.put("priorityOrder",4);
         var duplicates = new ArrayList<Map<String,Object>>(selected); duplicates.add(duplicate);
@@ -214,6 +218,14 @@ class WorkflowIntegrationTest {
         }
         assertThat(request("POST","/internal/roadmaps",Map.of("taskId",id,"companyId",1,"roadmapName","예산 초과","items",overBudget),null,true).statusCode()).isEqualTo(400);
         assertThat(roadmaps.findByTaskId(id)).isEmpty();
+
+        // 작업 예산이 없으면 예산 검증 없이 저장하고 예산 스냅샷은 비워 둔다.
+        String unlimited=create();event(unlimited,"APPROVAL_REQUIRED",Map.of());
+        request("POST","/api/ai/tasks/"+unlimited+"/approval",Map.of("decision","APPROVE"),token(601),false);awaitCall(unlimited,"resume");
+        assertThat(request("POST","/internal/roadmaps",Map.of("taskId",unlimited,"companyId",1,"roadmapName","예산 없음","items",overBudget),null,true).statusCode()).isEqualTo(200);
+        var stored=roadmaps.findByTaskId(unlimited).orElseThrow();
+        assertThat(stored.getBudgetLimitKrw()).isNull();
+        assertThat(stored.getTotalAllocatedKrw()).isGreaterThan(300000000L);
     }
 
     @Test void agentHttpFailureIsPersistedAsFailed() throws Exception {

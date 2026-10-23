@@ -38,24 +38,27 @@ public class RoadmapService {
             if (!assessment.getTaskId().equals(task.getTaskId()) || !assessment.getCompanyId().equals(task.getCompanyId()))
                 throw ApiException.validation("같은 작업·기업의 성숙도 평가만 연결할 수 있습니다.");
         }
-        Evaluation evaluation = calc.evaluate(task.getCompanyId());
-        Map<Long,CandidateScore> eligible = evaluation.eligible().stream().collect(Collectors.toMap(CandidateScore::solutionId, Function.identity()));
-        Set<Long> processes = new HashSet<>(), solutions = new HashSet<>();
+        Evaluation evaluation = calc.evaluate(task.getCompanyId(), task.getBudgetKrw());
+        Map<CandidateKey,CandidateScore> eligible = evaluation.eligible().stream().collect(Collectors.toMap(CandidateScore::key, Function.identity()));
+        Set<Long> processes = new HashSet<>();
+        Set<CandidateKey> keys = new HashSet<>();
         Set<Integer> priorities = new HashSet<>();
         long total = 0;
         for (ItemRequest item : request.items()) {
-            CandidateScore score = eligible.get(item.solutionId());
-            if (score == null || score.processId() != item.processId()) throw ApiException.validation("기업의 선정 가능한 업무·솔루션만 등록할 수 있습니다.");
-            if (!processes.add(item.processId()) || !solutions.add(item.solutionId())) throw ApiException.validation("같은 업무를 중복 등록할 수 없습니다.");
+            CandidateKey key = new CandidateKey(item.processId(), item.solutionId());
+            CandidateScore score = eligible.get(key);
+            if (score == null) throw ApiException.validation("기업의 선정 가능한 업무·솔루션만 등록할 수 있습니다.");
+            if (!processes.add(item.processId())) throw ApiException.validation("같은 업무를 중복 등록할 수 없습니다.");
+            keys.add(key);
             if (!priorities.add(item.priorityOrder())) throw ApiException.validation("우선순위는 중복될 수 없습니다.");
             if (!item.evidence().isArray()) throw ApiException.validation("과제 근거는 배열이어야 합니다.");
             validateNumbers(item, score);
             total = Math.addExact(total, score.firstYearTcoKrw());
         }
-        if (total > evaluation.budgetKrw()) throw ApiException.validation("기업의 AX 예산을 초과했습니다.");
+        if (evaluation.budgetKrw() != null && total > evaluation.budgetKrw()) throw ApiException.validation("작업 예산을 초과했습니다.");
         for (ItemRequest item : request.items()) {
-            Long dependency = eligible.get(item.solutionId()).dependsOnSolutionId();
-            if (dependency != null && !solutions.contains(dependency)) throw ApiException.validation("선행 솔루션을 같은 로드맵에 포함해야 합니다.");
+            CandidateKey dependency = eligible.get(new CandidateKey(item.processId(), item.solutionId())).dependsOn();
+            if (dependency != null && !keys.contains(dependency)) throw ApiException.validation("선행 과제를 같은 로드맵에 포함해야 합니다.");
         }
         AxRoadmap roadmap = new AxRoadmap();
         roadmap.setTaskId(task.getTaskId()); roadmap.setCompanyId(task.getCompanyId()); roadmap.setAssessmentId(request.assessmentId());

@@ -10,8 +10,9 @@ public final class CalcInputs {
 	private CalcInputs() {
 	}
 
+	/** workType이 null이면 매칭하지 않는다. */
 	public record ProcessInput(long processId, long departmentId, BigDecimal standardizationLevel,
-			boolean requiresApproval) {
+			boolean requiresApproval, String workType) {
 	}
 
 	public record MetricInput(long metricId, long processId, LocalDate periodStart, LocalDate periodEnd,
@@ -25,15 +26,19 @@ public final class CalcInputs {
 	public record LinkInput(long processId, long systemId) {
 	}
 
-	public record SolutionInput(long solutionId, long targetProcessId, Long dependsOnSolutionId,
+	/** 업무 유형별 템플릿. 같은 workType의 업무마다 후보 하나가 된다. */
+	public record SolutionInput(long solutionId, String workType, Long dependsOnSolutionId,
 			long baseBuildCostKrw, long monthlyRunCostKrw, BigDecimal automationRateLow,
 			BigDecimal automationRateBase, BigDecimal automationRateHigh, BigDecimal timeReductionRateLow,
 			BigDecimal timeReductionRateBase, BigDecimal timeReductionRateHigh, BigDecimal minStandardizationLevel,
 			boolean requiresApi) {
 	}
 
-	/** 한 기업의 계산 입력 전체. processes·systems는 그 기업 것만, solutions는 그 기업 업무 대상만 넣는다. */
-	public record CompanyInput(long companyId, long budgetKrw, List<ProcessInput> processes,
+	/**
+	 * 한 기업의 계산 입력 전체. processes·systems는 그 기업 것만, solutions는 템플릿 전체를 넣는다.
+	 * budgetKrw가 null이면 예산 제약 없이 계산한다.
+	 */
+	public record CompanyInput(long companyId, Long budgetKrw, List<ProcessInput> processes,
 			List<MetricInput> metrics, List<SystemInput> systems, List<LinkInput> links,
 			List<SolutionInput> solutions) {
 	}

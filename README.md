@@ -57,7 +57,7 @@ INTERNAL_TOKEN=local-internal-token \
 | `AGENT_ENABLED` | | `false` | `false`면 Agent를 호출하지 않고 로그만 남김 |
 | `CORS_ORIGIN` | | `http://localhost` | 쉼표로 여러 개 가능 |
 | `AX_DOCS_DIR` | | `../db/docs` | 근거 원문 폴더 |
-| `AX_EVALUATION_AS_OF` | | `2026-10-01` | 계산 기준일 (최근 3개 완료 월 = 2026-07~09) |
+| `AX_EVALUATION_AS_OF` | | (빈 값 = 오늘) | 계산 기준일. 시드 시연은 `2026-10-01`로 설정 (최근 3개 완료 월 = 2026-07~09) |
 | `AX_TIME_ZONE` | | `Asia/Seoul` | `decidedAt` 등 시각 표기 기준 |
 | `PORT` | | `8080` | |
 
@@ -100,16 +100,20 @@ cd demo
 | Method | Path | 요청 | 응답 | 오류 |
 |---|---|---|---|---|
 | GET | `/internal/companies/{companyId}` | | `{ companyId, companyName, industry, employeeCount, axBudgetKrw, departments: [{ departmentId, departmentName, managerName, managerEmail, managerPhone }] }` | 404 |
-| GET | `/internal/companies/{companyId}/processes?departmentId=` | | `[{ processId, departmentId, departmentName, processName, purpose, processSteps, standardizationLevel, requiresApproval, exceptionRules }]` | 404 (다른 기업 부서 포함) |
+| GET | `/internal/companies/{companyId}/processes?departmentId=` | | `[{ processId, departmentId, departmentName, processName, purpose, processSteps, standardizationLevel, requiresApproval, exceptionRules, workType }]` | 404 (다른 기업 부서 포함) |
 | GET | `/internal/companies/{companyId}/metrics?departmentId=` | | `[{ processId, processName, departmentId, months: [{ metricId, periodStart, periodEnd, processingCount, avgProcessingMinutes, errorRate, hourlyLaborCostKrw, dataSource }], monthlyAvgCount, annualHours, weightedHourlyLaborCostKrw, dataConfidence, missingMonths }]` | 404 |
 | GET | `/internal/companies/{companyId}/systems` | | `[{ systemId, systemName, systemType, apiAvailable, dataAccessLevel, cloudBased, processes: [{ processId, usagePurpose }] }]` | 404 |
 | GET | `/internal/companies/{companyId}/budget` | | `{ companyId, axBudgetKrw }` | 404 |
-| GET | `/internal/solutions` | | 카탈로그 전체 (`targetProcessId`, `dependsOnSolutionId`, 비율 0~1) | |
-| POST | `/internal/ax/roi` | `{ processId, solutionId }` | 기준 문서 §7 형식 (AX점수 + low/base/high 시나리오) | 404 `NOT_FOUND`, 400 `VALIDATION_ERROR`(`hint.expectedProcessId`), 400 `EXCLUDED_PROCESS`(`hint.reason`), 400 `INSUFFICIENT_DATA`(`hint.missingMonths`) |
-| POST | `/internal/ax/portfolio` | `{ companyId, candidates?: [{ processId, solutionId }], maxItems?: 3 }` | 기준 문서 §7 형식 + `warnings` | 404, 400 |
+| GET | `/internal/companies/{companyId}/solution-candidates` | | `[{ processId, solutionId, workType, dependsOn: { processId, solutionId } \| null, excludedReason, metricsSufficient }]` | 404 |
+| GET | `/internal/solutions` | | 솔루션 템플릿 전체 (`workType`, `dependsOnSolutionId`, 비율 0~1) | |
+| POST | `/internal/ax/roi` | `{ processId, solutionId }` | 기준 문서 §7 형식 (AX점수 + low/base/high 시나리오, `dependsOnProcessId`) | 404 `NOT_FOUND`, 400 `VALIDATION_ERROR`(`hint.processWorkType`, `hint.solutionWorkType`), 400 `EXCLUDED_PROCESS`(`hint.reason`), 400 `INSUFFICIENT_DATA`(`hint.missingMonths`) |
+| POST | `/internal/ax/portfolio` | `{ companyId, candidates?: [{ processId, solutionId }], maxItems?: 3, budgetKrw? }` | 기준 문서 §7 형식 + `warnings` | 404, 400 |
 
 - 내부 API는 담당자 이메일·연락처를 **마스킹하지 않는다** (마스킹은 Agent Guardrail 담당).
-- 지표·계산의 기준일은 `AX_EVALUATION_AS_OF`(기본 2026-10-01). 최근 3개 완료 월 중 빠진 월이 있으면 그 업무 후보는 선정 가능 후보에서 빠진다.
+- 지표·계산의 기준일은 `AX_EVALUATION_AS_OF`이며 비어 있으면 오늘(`AX_TIME_ZONE` 기준)이다. 시드 데이터로 시연할 때는 `2026-10-01`로 설정한다. 최근 3개 완료 월 중 빠진 월이 있으면 그 업무 후보는 선정 가능 후보에서 빠진다.
+- 솔루션 카탈로그는 업무 유형(`workType`)별 템플릿이다. 유형이 같은 업무마다 후보 하나가 되며 후보는 `(processId, solutionId)` 쌍으로 구분한다. 업무 유형은 `KNOWLEDGE_QA`, `GUIDANCE`, `DECISION_SUPPORT`, `REPORT_AGGREGATION`, `RESEARCH_REPORT`, `MEETING_SUMMARY`, `TICKET_TRIAGE`, `CODE_REVIEW`, `DOC_AUTHORING`, `OTHER`이며 `OTHER`와 미분류 업무는 매칭하지 않는다.
+- 선행 템플릿은 같은 부서의 제외되지 않은 업무 중 그 유형인 첫 업무(`processId` 최소)에 붙는다. 붙일 업무가 없으면 그 쌍은 후보가 아니다. 선행 후보는 `(dependsOnProcessId, dependsOnSolutionId)`다.
+- 포트폴리오 예산은 요청의 `budgetKrw`(양수)를 쓴다. 생략하면 예산 제약 없이 선정하고 `budgetKrw`·`remainingBudgetKrw`는 `null`이다. 기업의 `axBudgetKrw`는 계산에 쓰지 않는다.
 
 ### 로컬 확인 (curl)
 
@@ -120,16 +124,17 @@ curl -s "localhost:8080/internal/companies/1/metrics?departmentId=103" -H "$H"
 curl -s "localhost:8080/internal/companies/1/processes?departmentId=104" -H "$H"
 # → 404 {"code":"NOT_FOUND","message":"부서 104는 없다","hint":{"validIds":[101,102,103]}}
 curl -s localhost:8080/internal/ax/roi -H "$H" -H 'Content-Type: application/json' -d '{"processId":207,"solutionId":507}'
-curl -s localhost:8080/internal/ax/portfolio -H "$H" -H 'Content-Type: application/json' -d '{"companyId":1}'
+curl -s localhost:8080/internal/ax/portfolio -H "$H" -H 'Content-Type: application/json' -d '{"companyId":1,"budgetKrw":300000000}'
 # → selected [507, 508, 509], totalAxScore 265.0, totalFirstYearTcoKrw 295000000, remainingBudgetKrw 5000000,
-#   evaluatedCombinations 56, validCombinations 39, runnerUp [504, 507, 509] 261.3,
-#   greedyTop3 [507, 508, 504] → BUDGET_EXCEEDED, MISSING_DEPENDENCY
+#   evaluatedCombinations 56, validCombinations 39, runnerUp.candidates 솔루션 [504, 507, 509] 261.3,
+#   greedyTop3.candidates 솔루션 [507, 508, 504] → BUDGET_EXCEEDED, MISSING_DEPENDENCY
 ```
 
 ## API 응답 보완 규칙
 
 - 포트폴리오 최상위 `warnings`는 `[{processId, solutionId, code: "INSUFFICIENT_METRICS", missingMonths: ["2026-08"]}]` 형식이며 경고가 없으면 `[]`이다. 지표 부족 후보는 선정에서 제외하고 다른 후보 계산은 계속한다. `excluded`는 정책상 제외 업무이고, 후보별 `warnings`는 `LOW_STANDARDIZATION` 등의 문자열 배열이다.
 - 지표 API는 최근 3개 완료 월 중 한 달이라도 누락되면 `monthlyAvgCount`, `annualHours`, `weightedHourlyLaborCostKrw`를 `null`로 반환한다. 존재하는 월은 `months`, 누락 월은 `missingMonths`에 유지한다. 정상 집계의 응답 정밀도는 각각 소수 2자리, 소수 2자리, 원 단위이며 HALF_UP을 쓴다. 운영 계산은 반올림 전 값을 사용한다.
+- `runnerUp.candidates`와 `greedyTop3.candidates`는 `[{ processId, solutionId }]`다.
 - `greedyTop3.violations`는 `BUDGET_EXCEEDED`, `MISSING_DEPENDENCY`, `DUPLICATE_PROCESS`를 사용한다. 복수 위반은 모두 반환하고 없으면 `[]`이다.
 - 로그인 실패는 `401 UNAUTHORIZED`와 일반 메시지 `이메일 또는 비밀번호가 올바르지 않습니다.`로 통일한다. 예상하지 못한 서버 오류는 `500 INTERNAL_ERROR`이며 상세 예외는 서버 로그에만 기록한다.
 - 승인 시각 `decidedAt`은 Spring이 승인 처리 시 서버 시각으로 생성하고 ISO 8601 오프셋 포함 형식으로 표기한다. 표기 시간대 `AX_TIME_ZONE`의 기본값은 `Asia/Seoul`이다. 이 설정은 계산 기준일 `AX_EVALUATION_AS_OF`와 독립적이다.
@@ -147,7 +152,7 @@ curl -s localhost:8080/internal/ax/portfolio -H "$H" -H 'Content-Type: applicati
 
 ## 회원가입·로그인 및 JWT
 
-- `POST /api/auth/signup`: `{"email":"newuser@gaon.example","password":"ChangeMe123!","name":"홍길동"}` → 201 `{"userId":603}`. 기업은 서버의 기본 기업(1)으로 지정하며 자동 로그인하지 않는다.
+- `POST /api/auth/signup`: `{"email":"newuser@gaon.example","password":"ChangeMe123!","name":"홍길동"}` → 201 `{"userId":603}`. 가입할 때마다 `name`을 회사명으로 하는 기업을 새로 만들어 연결하며 자동 로그인하지 않는다. 업종·직원 수·예산은 비워 둔다.
 - `POST /api/auth/login`: `{"email":"analyst1@gaon.example","password":"ChangeMe123!"}` → 200 `{accessToken, user: {userId, name, companyId}}`.
 - 시드 계정: `analyst1@gaon.example`(601), `analyst2@gaon.example`(602), 비밀번호는 모두 `ChangeMe123!`이다.
 - 가입 비밀번호는 8자 이상 영문·숫자를 포함해야 하며 BCrypt로 저장한다. BCrypt의 UTF-8 72바이트 한도를 넘으면 400이다. 이메일과 이름은 DB 길이 한도인 100자, 50자를 따른다.
@@ -180,28 +185,40 @@ cd demo
 | GET | `/api/ai/tasks?mine=true` | `[{taskId, status, requestText, createdAt, completedAt}]`, 최신순 |
 | GET | `/api/ai/tasks/{taskId}/stream` | `text/event-stream` |
 | POST | `/api/ai/tasks/{taskId}/approval` | `{decision: "APPROVE" 또는 "REJECT", reason?}` → 202 |
-| GET | `/api/docs/{documentId}` | `{documentId, title, docType, accessLevel, version, content}` |
+| GET | `/api/ai/tasks/{taskId}/extraction` | `{draftId, status: DRAFT 또는 CONFIRMED, documentIds, payload}` |
+| PUT | `/api/ai/tasks/{taskId}/extraction/confirm` | 수정한 `payload` 전체 → 202 |
+| GET | `/api/docs/{documentId}` | `{documentId, title, docType, accessLevel, version, content, pages}` |
+| POST | `/api/documents` | multipart `file`(PDF) → 201 `{documentId, status: "UPLOADED"}` |
+| GET | `/api/documents` | `[{documentId, title, docType, status, fileSize, pageCount, createdAt}]`, 최신순 |
 
-작업 생성의 userId·companyId는 JWT에서 가져오며 요청 본문으로 지정하지 않는다. 조회·SSE·승인은 요청자 본인만 가능하다(다른 사용자 403). 문서는 JWT와 같은 기업의 원문만 제공하며 이메일·전화번호를 마스킹한다. 원문은 `AX_DOCS_DIR/{documentId}.md`에서 읽으며 DB의 fileUri로 임의 경로를 열지 않는다.
+작업 생성의 userId·companyId는 JWT에서 가져오며 요청 본문으로 지정하지 않는다. 조회·SSE·승인은 요청자 본인만 가능하다(다른 사용자 403). 문서는 JWT와 같은 기업의 원문만 제공하며 이메일·전화번호를 마스킹한다. 시드 문서 원문은 `AX_DOCS_DIR/{documentId}.md`에서 읽으며 DB의 fileUri로 임의 경로를 열지 않는다. 업로드 문서(`docType=UPLOADED`)는 AI가 돌려준 페이지 텍스트를 `pages`와 이를 이은 `content`로 반환하고, 색인 전이면 409다.
+
+PDF 업로드는 JWT 기업의 문서로 등록한다. PDF 시그니처(`%PDF-`)로 형식을 확인하고 20MB, 기업당 20개(FAILED 제외)까지 받는다. 같은 파일(sha256)은 409 `DUPLICATE_DOCUMENT`이며 FAILED 문서는 다시 올릴 수 있다. 원본 파일은 서버에 저장하지 않고 커밋 후 AI 색인 API로 보낸다. FE는 목록 API로 `status`가 `INDEXED` 또는 `FAILED`가 될 때까지 확인한다.
 
 ### 내부 콜백·저장 API (X-Internal-Token)
 
 | Method | 경로 | 요청 / 응답 |
 |---|---|---|
 | POST | `/internal/tasks/{taskId}/events` | `{type, taskId, ts, node, data}` → 204 |
-| PATCH | `/internal/tasks/{taskId}` | `{status?, result?, errorMessage?, traceUrl?}` → 작업 상태·결과 |
+| PATCH | `/internal/tasks/{taskId}` | `{status?, result?, errorMessage?, traceUrl?, budgetKrw?}` → 작업 상태·결과 |
 | POST | `/internal/assessments` | `{taskId, scores: {data, infra, automation, aiCapability, governance}, criteriaVersion, evidence}` → `{assessmentId}` |
 | POST | `/internal/roadmaps` | `{taskId, companyId, assessmentId?, roadmapName, items}` → `{roadmapId, itemIds}` |
 | POST | `/internal/projects` | `{itemId, ownerDepartmentId, projectName}` → `{projectId}` |
 | PATCH | `/internal/projects/{projectId}/status` | `{status}` → `{projectId, projectStatus}` |
+| POST | `/internal/extractions` | `{taskId, documentIds, payload}` → `{draftId}` |
+| PATCH | `/internal/documents/{documentId}` | `{status: INDEXED 또는 FAILED, pageCount?, pages?: [{page, text}], errorMessage?}` → 문서 요약 |
 
-- 상태는 `QUEUED → RUNNING → WAITING_APPROVAL → RUNNING → DONE`이며 실패는 FAILED, 사용자 거절은 REJECTED다. 종료 상태를 RUNNING으로 되돌릴 수 없다. 승인 API만 WAITING_APPROVAL에서 RUNNING·REJECTED로 전환할 수 있다.
+- 문서 색인 결과는 UPLOADED 문서에만 한 번 저장한다(이후 409). INDEXED는 `pageCount`와 1페이지부터 빠짐없는 `pages`가 필요하며 최대 100페이지다. FAILED는 pages 없이 보내고 `errorMessage`는 로그에만 남긴다.
+
+- 상태는 `QUEUED → RUNNING → (WAITING_CONFIRMATION → RUNNING) → WAITING_APPROVAL → RUNNING → DONE`이며 실패는 FAILED, 사용자 거절은 REJECTED다. 종료 상태를 RUNNING으로 되돌릴 수 없다. 확정 API만 WAITING_CONFIRMATION에서, 승인 API만 WAITING_APPROVAL에서 RUNNING·REJECTED로 전환할 수 있다.
+- 기업 데이터 확정: 부서가 없는 기업은 미확정이다. Agent는 색인 완료 문서에서 추출한 결과를 `POST /internal/extractions`로 저장하고 `CONFIRMATION_REQUIRED` 이벤트를 보낸다(draft 없이 보내면 409). 사용자가 확정하면 Spring이 key 참조를 검증하고 부서, 업무, 지표, 시스템, 업무-시스템 연결을 저장한 뒤 Agent를 재개한다. 기업당 한 번만 확정한다. 업무마다 `workType`(필수)을 받아 솔루션 템플릿 매칭에 쓴다.
+- `payload`는 `{company?: {industry, employeeCount}, departments: [{key, name}], processes: [{key, departmentKey, name, purpose?, steps?, standardizationLevel?, requiresApproval, exceptionRules?, source?}], metrics: [{processKey, monthlyCount, avgMinutes, hourlyLaborCostKrw, errorRate?, dataSource, source?}], systems: [{key, name, type, apiAvailable, dataAccessLevel, cloudBased, processKeys}]}`이다. `source`는 `{documentId, page}`다. 지표는 업무당 월평균 1건이며 계산 기준일의 최근 3개 완료 월에 같은 값으로 저장한다. `dataSource`는 문서 값을 그대로 쓰면 `EXTRACTED`, 사용자가 입력하거나 고치면 `USER_INPUT`이다. 신뢰도 표시는 ASSUMED < EXTRACTED < SURVEY(= USER_INPUT) < MEASURED다.
 - `result`는 JSON 객체이며 Spring은 `approval` 외의 필드를 해석하지 않고 보관한다. PATCH에서 result를 보내면 통째로 교체하지만 기존 approval은 보존하며, 내부 호출자가 넣은 approval은 무시한다. 필드 생략은 기존 값 유지다.
 - APPROVAL_REQUIRED 이벤트는 WAITING_APPROVAL, DONE·FAILED 이벤트는 종료 상태를 DB에도 반영한다. DONE의 data.result 역시 승인 기록을 보존한다. 상태를 먼저 PATCH하고 같은 상태의 이벤트를 보내는 방식도 지원한다.
-- `ts`는 오프셋 포함 ISO 8601 문자열이다. 이벤트의 taskId는 경로와 같아야 하고 data는 JSON 객체다. TOKEN의 data는 `{text}`, TOOL_START/END는 `{tool, label, ok}`, APPROVAL_REQUIRED는 `{roadmap, items, totalAllocatedKrw, budgetKrw}`, DONE은 `{result}`, FAILED는 `{message, traceUrl}`를 사용한다.
+- `ts`는 오프셋 포함 ISO 8601 문자열이다. 이벤트의 taskId는 경로와 같아야 하고 data는 JSON 객체다. TOKEN의 data는 `{text}`, TOOL_START/END는 `{tool, label, ok}`, CONFIRMATION_REQUIRED는 `{}`, APPROVAL_REQUIRED는 `{roadmap, items, totalAllocatedKrw, budgetKrw}`, DONE은 `{result}`, FAILED는 `{message, traceUrl}`를 사용한다.
 - 성숙도는 5개 영역의 0~100 점수와 `criteriaVersion: "v1.0"`, 근거 배열을 받는다. 누락 시 400과 hint.missingAreas를 반환하며, 총점은 정책 파일의 가중치로 Spring이 계산한다. 영역 부족 시 Agent는 저장하지 않고 부분 점수를 작업 result.maturity에 보관한다.
 - 로드맵 항목은 기존 RoadmapItem camelCase 계약을 따른다. 점수·금액은 `/internal/ax/portfolio`의 selected와 scenarios.base를 그대로 복사한다. `allocatedBudgetKrw=firstYearTcoKrw`, `expectedAnnualSavingKrw=annualSavingKrw`, `threeYearNetValueKrw=threeYearNetKrw`다. 기타 필수 필드는 processId, solutionId, itemName, priorityOrder, phase(SHORT/MID/LONG), startMonth, durationMonths, axScore, impactScore, feasibilityScore, roiPct, rationale, evidence이며 paybackMonths는 null 가능하다.
-- 승인 전 로드맵 등록은 409, 재계산 불일치는 400 CALCULATION_MISMATCH(hint.expected)다. 예산·선행 솔루션·업무 중복을 검증한다. 승인자는 task.userId, 승인 시각은 Spring의 approval.decidedAt, 예산은 등록 시 기업 예산 스냅샷을 사용한다.
+- 승인 전 로드맵 등록은 409, 재계산 불일치는 400 CALCULATION_MISMATCH(hint.expected)다. 작업 예산(`budgetKrw`, Agent가 요청에서 추출해 PATCH로 저장)·선행 과제(`(processId, solutionId)` 쌍)·업무 중복을 검증한다. 같은 템플릿은 다른 업무에 함께 등록할 수 있다. 작업 예산이 없으면 예산은 검증하지 않고 `budget_limit_krw`를 비워 둔다. 승인자는 task.userId, 승인 시각은 Spring의 approval.decidedAt를 사용한다.
 - 같은 taskId의 로드맵, 같은 itemId의 프로젝트 재시도는 기존 ID를 반환한다. DB 잠금으로 동시 승인·등록도 보호한다.
 - 프로젝트는 REGISTERED → IN_PROGRESS → COMPLETED이며 각 상태는 ON_HOLD와 상호 전환할 수 있다. 최초 프로젝트 등록은 APPROVED 로드맵만 가능하다.
 
@@ -217,8 +234,10 @@ cd demo
 
 실제 연결 시 `AGENT_ENABLED=true`, `AGENT_BASE_URL=http://agent:8000`을 설정한다. Spring은 커밋 이후 비동기로 다음을 호출하며 Agent는 202를 반환해야 한다.
 
-- `POST /tasks/{taskId}/run`: `{companyId, userId, requestText}`
+- `POST /tasks/{taskId}/run`: `{companyId, userId, requestText, companyDataConfirmed, documentIds}`. 미확정 기업이면 `documentIds`에 색인 완료 문서 ID를 담는다.
+- `POST /tasks/{taskId}/confirm`: `{userId}`. 사용자가 기업 데이터를 확정한 뒤 호출한다.
 - `POST /tasks/{taskId}/resume`: `{decision, userId, reason}`
+- `POST /documents/{documentId}/ingest`: multipart `{companyId, fileName, contentType, file}`. 색인 결과는 `PATCH /internal/documents/{documentId}`로 돌려준다. 호출이 실패하면 문서는 FAILED가 된다.
 
 호출 시 X-Internal-Token을 전달하고 연결 제한 5초·응답 제한 10초를 적용한다. 전송 실패 시 작업은 FAILED로 저장하고 SSE에 오류를 알린다. 사용자 거절은 resume 실패에도 REJECTED를 유지한다. 자동 재전송 큐·RabbitMQ·프로세스 재시작 시 작업 복구는 이번 범위에 포함하지 않는다.
 

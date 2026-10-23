@@ -10,17 +10,21 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import com.axnavigator.auth.AuthDtos.*;
 import com.axnavigator.common.*;
+import com.axnavigator.company.Company;
+import com.axnavigator.company.CompanyRepository;
 
 @Service
 public class AuthService {
     private final UserAccountRepository users;
+    private final CompanyRepository companies;
     private final PasswordEncoder passwords;
     private final JwtEncoder jwt;
     private final AxProperties properties;
     private final String dummyHash;
 
-    public AuthService(UserAccountRepository users, PasswordEncoder passwords, JwtEncoder jwt, AxProperties properties) {
+    public AuthService(UserAccountRepository users, CompanyRepository companies, PasswordEncoder passwords, JwtEncoder jwt, AxProperties properties) {
         this.users = users;
+        this.companies = companies;
         this.passwords = passwords;
         this.jwt = jwt;
         this.properties = properties;
@@ -30,8 +34,11 @@ public class AuthService {
     @Transactional
     public SignupResponse signup(SignupRequest request) {
         if (users.existsByEmail(request.email())) throw duplicateEmail();
+        // 사용자 = 고객사. 가입 이름을 회사명으로 쓰고 나머지 회사 정보는 문서 추출 확정 시 채운다.
+        Company company = new Company();
+        company.setCompanyName(request.name());
         UserAccount user = new UserAccount();
-        user.setCompanyId(properties.defaultCompanyId());
+        user.setCompanyId(companies.saveAndFlush(company).getCompanyId());
         user.setEmail(request.email());
         user.setUserName(request.name());
         user.setPasswordHash(passwords.encode(request.password()));

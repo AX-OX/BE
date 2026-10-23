@@ -62,7 +62,7 @@ public class CompanyQueryService {
 			.map(p -> new ProcessResponse(p.getProcessId(), p.getDepartmentId(),
 					depts.get(p.getDepartmentId()).getDepartmentName(), p.getProcessName(), p.getPurpose(),
 					parse(p.getProcessSteps()), p.getStandardizationLevel(), p.isRequiresApproval(),
-					p.getExceptionRules()))
+					p.getExceptionRules(), p.getWorkType()))
 			.toList();
 	}
 

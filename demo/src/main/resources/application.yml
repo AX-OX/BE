@@ -14,6 +14,10 @@ spring:
   sql:
     init:
       mode: never
+  servlet:
+    multipart:
+      max-file-size: 20MB
+      max-request-size: 21MB
 
 server:
   port: ${PORT:8080}
@@ -33,8 +37,7 @@ ax:
   docs:
     dir: ${AX_DOCS_DIR:../db/docs}
   evaluation:
-    as-of: ${AX_EVALUATION_AS_OF:2026-10-01}
-  default-company-id: 1
+    as-of: ${AX_EVALUATION_AS_OF:}
   time-zone: ${AX_TIME_ZONE:Asia/Seoul}
 
 springdoc:
