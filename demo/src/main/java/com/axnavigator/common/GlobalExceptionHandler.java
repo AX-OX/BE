@@ -21,6 +21,7 @@ import org.springframework.web.multipart.MultipartException;
 import org.springframework.web.multipart.support.MissingServletRequestPartException;
 import org.springframework.web.method.annotation.HandlerMethodValidationException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.context.request.async.AsyncRequestNotUsableException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 import com.axnavigator.doc.DocumentUploadService;
 
@@ -88,6 +89,12 @@ public class GlobalExceptionHandler {
 		return ResponseEntity.status(ErrorCode.VALIDATION_ERROR.status())
 			.contentType(MediaType.APPLICATION_JSON)
 			.body(new ErrorResponse(ErrorCode.VALIDATION_ERROR.name(), message, hint));
+	}
+
+	// 연결이 닫힌 SSE 응답에는 JSON 오류 본문을 다시 쓸 수 없다.
+	@ExceptionHandler(AsyncRequestNotUsableException.class)
+	void handleDisconnectedClient(AsyncRequestNotUsableException ex) {
+		log.debug("Async response connection closed", ex);
 	}
 
 	// 예상하지 못한 오류의 상세 정보는 로그에만 기록한다.

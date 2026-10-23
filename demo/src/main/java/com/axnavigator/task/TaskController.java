@@ -41,7 +41,7 @@ public class TaskController {
         CurrentUser user = CurrentUser.from(jwt); return tasks.history(user.userId(), user.companyId());
     }
     @GetMapping(value = "/{taskId}/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    @Operation(summary = "작업 진행 SSE 구독", description = "fetch 스트리밍에 Authorization 헤더를 전달하세요. 15초마다 : ping을 보내며 DONE·FAILED·거절 시 닫습니다. 이벤트 재생은 제공하지 않으므로 재연결 직후 작업 조회로 상태를 복구하세요.")
+    @Operation(summary = "작업 진행 SSE 구독", description = "fetch 스트리밍에 Authorization 헤더를 전달하세요. 15초마다 : ping을 보내며 DONE·FAILED·거절 또는 45초 경과 시 정상 종료합니다. 진행 중이면 재구독하세요. 이벤트 재생은 제공하지 않으므로 재연결 직후 작업 조회로 상태를 복구하세요.")
     public ResponseEntity<SseEmitter> stream(@AuthenticationPrincipal Jwt jwt, @PathVariable String taskId) {
         CurrentUser user = CurrentUser.from(jwt);
         return ResponseEntity.ok().header("X-Accel-Buffering", "no").cacheControl(CacheControl.noCache())
