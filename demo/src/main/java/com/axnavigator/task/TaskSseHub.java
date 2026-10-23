@@ -19,7 +19,8 @@ public class TaskSseHub {
     public TaskSseHub(JsonSupport json) { this.json = json; }
 
     public synchronized SseEmitter subscribe(String taskId) {
-        SseEmitter emitter = new SseEmitter(0L);
+        // Cloud Run의 60초 요청 제한 전에 정상 종료한다. FE는 상태 조회 후 재구독한다.
+        SseEmitter emitter = new SseEmitter(45_000L);
         streams.computeIfAbsent(taskId, key -> new HashSet<>()).add(emitter);
         emitter.onCompletion(() -> remove(taskId, emitter));
         emitter.onTimeout(() -> { remove(taskId, emitter); emitter.complete(); });

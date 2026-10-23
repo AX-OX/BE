@@ -100,6 +100,15 @@ class SecuritySliceTest {
 	}
 
 	@Test
+	void extractionConfirmPreflightAllowsPut() throws Exception {
+		mvc.perform(options("/api/ai/tasks/example/extraction/confirm").header("Origin", "http://app.example")
+			.header("Access-Control-Request-Method", "PUT")
+			.header("Access-Control-Request-Headers", "Authorization,Content-Type"))
+			.andExpect(status().isOk())
+			.andExpect(header().string("Access-Control-Allow-Origin", "http://app.example"));
+	}
+
+	@Test
 	void corsPreflightRejectsOtherOrigin() throws Exception {
 		mvc.perform(options("/api/ai/tasks").header("Origin", "http://evil.example")
 			.header("Access-Control-Request-Method", "POST"))

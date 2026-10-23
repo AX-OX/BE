@@ -33,15 +33,19 @@ public class TaskService {
 
     @Transactional
     public Created create(Long userId, Long companyId, CreateRequest request) {
+        // 색인 중인 문서로 Agent를 시작하면 빈 documentIds로 추출 작업이 즉시 실패한다.
+        boolean confirmed = departments.existsByCompanyId(companyId);
+        List<Long> documentIds = confirmed ? List.of() : documents.findByCompanyIdAndStatusOrderByDocumentId(companyId, DocumentStatus.INDEXED)
+            .stream().map(Document::getDocumentId).toList();
+        if (!confirmed && documentIds.isEmpty()) {
+            throw ApiException.invalidState("분석할 색인 완료 문서가 없습니다. PDF를 업로드하고 문서 색인이 완료된 후 다시 요청해 주세요.");
+        }
         AiTask task = new AiTask();
         task.setTaskId(UUID.randomUUID().toString()); task.setUserId(userId); task.setCompanyId(companyId);
         task.setRequestText(request.requestText()); task.setStatus(TaskStatus.QUEUED);
         tasks.saveAndFlush(task);
         // Agent는 DB 커밋 이후 호출한다. 202 접수와 외부 HTTP 실행을 분리한다.
         // 부서가 없으면 아직 기업 데이터를 확정하지 않은 것이다. Agent는 색인 완료 문서에서 먼저 추출한다.
-        boolean confirmed = departments.existsByCompanyId(companyId);
-        List<Long> documentIds = confirmed ? List.of() : documents.findByCompanyIdAndStatusOrderByDocumentId(companyId, DocumentStatus.INDEXED)
-            .stream().map(Document::getDocumentId).toList();
         events.publishEvent(new TaskSignals.Run(task.getTaskId(), companyId, userId, request.requestText(), confirmed, documentIds));
         return new Created(task.getTaskId());
     }
