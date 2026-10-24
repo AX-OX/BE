@@ -27,6 +27,9 @@ steps:
     args:
       - -ceu
       - |
+        # The stable SDK image does not include an SSH client.
+        apt-get update -qq
+        apt-get install -y --no-install-recommends openssh-client curl
         image='asia-northeast1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/be/axox'
         digest=$$(gcloud artifacts docker images describe "$$image:$COMMIT_SHA" \
           --project='$PROJECT_ID' --format='value(image_summary.digest)')
