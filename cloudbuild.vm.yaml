@@ -1,0 +1,48 @@
+# Trigger: AX-OX/BE, push to ^main$, global Cloud Build.
+# Build account: 853402721456-compute@developer.gserviceaccount.com.
+# The account uses IAP SSH on axox-vm-20261024 only (port 22).
+# Application secrets stay in /opt/axox-vm/runtime on the VM.
+# The root-owned update-service.sh serializes deployments, waits for health,
+# and restores the previous image if the new backend cannot become healthy.
+steps:
+  - id: build-and-test
+    name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - --build-arg
+      - RUN_TESTS=true
+      - --label
+      - org.opencontainers.image.revision=$COMMIT_SHA
+      - --tag
+      - asia-northeast1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/be/axox:$COMMIT_SHA
+      - .
+  - id: publish
+    name: gcr.io/cloud-builders/docker
+    args:
+      - push
+      - asia-northeast1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/be/axox:$COMMIT_SHA
+  - id: deploy-backend
+    name: gcr.io/google.com/cloudsdktool/google-cloud-cli:stable
+    entrypoint: bash
+    args:
+      - -ceu
+      - |
+        # The stable SDK image does not include an SSH client.
+        apt-get update -qq
+        DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends openssh-client curl ca-certificates
+        image='asia-northeast1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/be/axox'
+        digest=$$(gcloud artifacts docker images describe "$$image:$COMMIT_SHA" \
+          --project='$PROJECT_ID' --format='value(image_summary.digest)')
+        [[ "$$digest" =~ ^sha256:[a-f0-9]{64}$$ ]]
+        gcloud compute ssh be-cicd@axox-vm-20261024 \
+          --project='$PROJECT_ID' --zone=asia-northeast1-b \
+          --tunnel-through-iap --ssh-key-expire-after=30m --quiet \
+          --command="sudo /opt/axox-vm/update-service.sh backend '$$image@$$digest'"
+        curl --fail --silent --show-error --retry 6 --retry-delay 5 \
+          --retry-all-errors --max-time 15 \
+          https://axox.34.104.191.144.sslip.io/health
+images:
+  - asia-northeast1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/be/axox:$COMMIT_SHA
+options:
+  logging: CLOUD_LOGGING_ONLY
+timeout: 1200s
