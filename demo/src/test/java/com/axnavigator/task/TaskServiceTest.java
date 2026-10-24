@@ -30,7 +30,7 @@ class TaskServiceTest {
         AxProperties properties = mock(AxProperties.class);
         when(properties.timeZone()).thenReturn("Asia/Seoul");
         return new TaskService(tasks, departments, documents, mock(ExtractionDraftRepository.class),
-            mock(AxAssessmentRepository.class), new JsonSupport(), events, properties);
+            mock(AxAssessmentRepository.class), new JsonSupport(), events, properties, mock(com.axnavigator.recovery.CommandQueue.class));
     }
 
     @Test
