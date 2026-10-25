@@ -24,6 +24,11 @@ server:
   address: 0.0.0.0
 
 ax:
+  recovery:
+    enabled: ${AX_RECOVERY_ENABLED:false}
+    lease-seconds: ${AX_RECOVERY_LEASE_SECONDS:90}
+    max-attempts: ${AX_RECOVERY_MAX_ATTEMPTS:5}
+    input-retention-hours: ${AX_RECOVERY_INPUT_RETENTION_HOURS:24}
   jwt:
     secret: ${JWT_SECRET}
     ttl: ${JWT_TTL:12h}

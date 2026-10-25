@@ -242,3 +242,8 @@ PDF 업로드는 JWT 기업의 문서로 등록한다. PDF 시그니처(`%PDF-`)
 호출 시 X-Internal-Token을 전달하고 연결 제한 5초·응답 제한 10초를 적용한다. 전송 실패 시 작업은 FAILED로 저장하고 SSE에 오류를 알린다. 사용자 거절은 resume 실패에도 REJECTED를 유지한다. 자동 재전송 큐·RabbitMQ·프로세스 재시작 시 작업 복구는 이번 범위에 포함하지 않는다.
 
 `./gradlew clean build`는 Docker·DB 없이 단위·슬라이스 테스트를 실행한다. `./gradlew integrationTest`는 격리된 PostgreSQL과 HTTP mock Agent로 전체 흐름, 권한·마스킹, 계산값 변조, 동시 승인·등록, SSE 종료, Agent 장애를 검증한다. 테스트용 mock은 운영 실행에 포함하지 않는다.
+# AI 작업 복구 모드
+
+배포·장애 후 분석과 PDF 색인을 재개하는 선택적 DB 큐/Worker 구조는
+[구현·검증·배포 안내](docs/DURABLE_AI_RECOVERY.md)를 참고한다.
+기본 비활성화이며 대응 AI 릴리스와 업무 DB 마이그레이션 후 전환한다.

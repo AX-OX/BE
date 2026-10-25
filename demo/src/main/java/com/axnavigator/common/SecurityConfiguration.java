@@ -30,7 +30,9 @@ public class SecurityConfiguration {
 	/** /internal/** : X-Internal-Token 필수(없거나 틀리면 403), 세션 없음. agent·business-mcp 전용. */
 	@Bean
 	@Order(1)
-	SecurityFilterChain internalSecurityFilterChain(HttpSecurity http, AxProperties properties) throws Exception {
+	SecurityFilterChain internalSecurityFilterChain(HttpSecurity http, AxProperties properties,
+            @org.springframework.beans.factory.annotation.Value("${ax.recovery.enabled:false}") boolean recoveryEnabled) throws Exception {
+		if (recoveryEnabled) http.addFilterBefore(new InternalTokenFilter(properties.internalToken()), AnonymousAuthenticationFilter.class);
 		return http.securityMatcher("/internal/**")
 			.csrf(AbstractHttpConfigurer::disable)
 			.httpBasic(AbstractHttpConfigurer::disable)
@@ -38,7 +40,7 @@ public class SecurityConfiguration {
 			.logout(AbstractHttpConfigurer::disable)
 			.requestCache(AbstractHttpConfigurer::disable)
 			.sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-			// .addFilterBefore(new InternalTokenFilter(properties.internalToken()), AnonymousAuthenticationFilter.class)
+			// Recovery mode adds the token filter above; legacy mode keeps its current policy.
 			.authorizeHttpRequests(authorize -> authorize
 				.dispatcherTypeMatchers(DispatcherType.ASYNC, DispatcherType.ERROR).permitAll()
 				.anyRequest().permitAll())

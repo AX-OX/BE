@@ -1,5 +1,7 @@
 package com.axnavigator.task;
 
+import com.axnavigator.recovery.CommandQueue;
+
 import java.time.*;
 import java.util.*;
 import org.springframework.context.ApplicationEventPublisher;
@@ -16,6 +18,7 @@ import tools.jackson.databind.node.ObjectNode;
 
 @Service
 public class TaskService {
+    private final CommandQueue commands;
     private final AiTaskRepository tasks;
     private final DepartmentRepository departments;
     private final DocumentRepository documents;
@@ -26,7 +29,8 @@ public class TaskService {
     private final ZoneId zone;
 
     public TaskService(AiTaskRepository tasks, DepartmentRepository departments, DocumentRepository documents, ExtractionDraftRepository drafts,
-            AxAssessmentRepository assessments, JsonSupport json, ApplicationEventPublisher events, AxProperties properties) {
+            AxAssessmentRepository assessments, JsonSupport json, ApplicationEventPublisher events, AxProperties properties, CommandQueue commands) {
+        this.commands = commands;
         this.tasks = tasks; this.departments = departments; this.documents = documents; this.drafts = drafts; this.assessments = assessments;
         this.json = json; this.events = events; this.zone = ZoneId.of(properties.timeZone());
     }
@@ -46,7 +50,9 @@ public class TaskService {
         tasks.saveAndFlush(task);
         // Agent는 DB 커밋 이후 호출한다. 202 접수와 외부 HTTP 실행을 분리한다.
         // 부서가 없으면 아직 기업 데이터를 확정하지 않은 것이다. Agent는 색인 완료 문서에서 먼저 추출한다.
-        events.publishEvent(new TaskSignals.Run(task.getTaskId(), companyId, userId, request.requestText(), confirmed, documentIds));
+        var command = new TaskSignals.Run(task.getTaskId(), companyId, userId, request.requestText(), confirmed, documentIds);
+        commands.enqueue(command);
+        events.publishEvent(command);
         return new Created(task.getTaskId());
     }
 
@@ -73,7 +79,9 @@ public class TaskService {
         if (task.getStatus() == TaskStatus.REJECTED) {
             task.setCompletedAt(LocalDateTime.now(zone)); events.publishEvent(new TaskSignals.Close(taskId));
         }
-        events.publishEvent(new TaskSignals.Resume(taskId, request.decision(), userId, request.reason()));
+        var command = new TaskSignals.Resume(taskId, request.decision(), userId, request.reason());
+        commands.enqueue(command);
+        events.publishEvent(command);
     }
 
     @Transactional
@@ -152,7 +160,9 @@ public class TaskService {
     public void confirmed(AiTask task) {
         if (task.getStatus() != TaskStatus.WAITING_CONFIRMATION) throw ApiException.invalidState("확정 대기 중인 작업만 확정할 수 있습니다.");
         task.setStatus(TaskStatus.RUNNING);
-        events.publishEvent(new TaskSignals.Confirm(task.getTaskId(), task.getUserId()));
+        var command = new TaskSignals.Confirm(task.getTaskId(), task.getUserId());
+        commands.enqueue(command);
+        events.publishEvent(command);
     }
     public static boolean terminal(TaskStatus status) { return status == TaskStatus.DONE || status == TaskStatus.FAILED || status == TaskStatus.REJECTED; }
     public Detail snapshot(AiTask task) { return new Detail(task.getTaskId(), task.getStatus(), json.read(task.getResult()), task.getTraceUrl()); }

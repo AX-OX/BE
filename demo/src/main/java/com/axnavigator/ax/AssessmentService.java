@@ -28,6 +28,8 @@ public class AssessmentService {
     @Transactional
     public AssessmentResponse save(AssessmentRequest request) {
         AiTask task = tasks.lock(request.taskId());
+        var existing = assessments.findFirstByTaskIdOrderByAssessmentIdAsc(request.taskId());
+        if (existing.isPresent()) return new AssessmentResponse(existing.get().getAssessmentId());
         if (TaskService.terminal(task.getStatus())) throw ApiException.invalidState("종료된 작업의 성숙도는 저장할 수 없습니다.");
         List<String> missing = AREAS.keySet().stream().filter(k -> request.scores().get(k) == null).sorted().toList();
         if (!missing.isEmpty()) throw new ApiException(ErrorCode.VALIDATION_ERROR, "성숙도 5개 영역의 점수가 모두 필요합니다.", Map.of("missingAreas", missing));
