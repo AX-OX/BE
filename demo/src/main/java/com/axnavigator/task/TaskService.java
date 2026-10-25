@@ -60,6 +60,12 @@ public class TaskService {
     public Detail detail(String taskId, Long userId, Long companyId) { return snapshot(owned(find(taskId), userId, companyId)); }
 
     @Transactional(readOnly = true)
+    public ChatContext chatContext(String taskId, Long userId, Long companyId) {
+        var task = owned(find(taskId), userId, companyId);
+        return new ChatContext(task.getTaskId(), task.getStatus(), json.read(task.getResult()), task.getRequestText());
+    }
+
+    @Transactional(readOnly = true)
     public List<History> history(Long userId, Long companyId) {
         return tasks.findByUserIdOrderByCreatedAtDesc(userId).stream().filter(t -> t.getCompanyId().equals(companyId))
             .map(t -> new History(t.getTaskId(), t.getStatus(), t.getRequestText(), t.getCreatedAt(), t.getCompletedAt())).toList();

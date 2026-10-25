@@ -26,6 +26,24 @@ class TaskServiceTest {
     private final DocumentRepository documents = mock(DocumentRepository.class);
     private final ApplicationEventPublisher events = mock(ApplicationEventPublisher.class);
 
+    @Test
+    void chatContextReturnsOriginalRequestOnlyToTheTaskOwnerAndCompany() {
+        AiTask task = new AiTask();
+        task.setTaskId("owned-task"); task.setUserId(701L); task.setCompanyId(7L);
+        task.setStatus(TaskStatus.DONE); task.setRequestText("개발팀을 예산 2억 원으로 분석해줘");
+        task.setResult("{\"answer\":\"기존 분석 결과\"}");
+        when(tasks.findById("owned-task")).thenReturn(java.util.Optional.of(task));
+        TaskService service = service();
+        var context = service.chatContext("owned-task", 701L, 7L);
+        assertThat(context.requestText()).isEqualTo(task.getRequestText());
+        assertThat(context.result().get("answer").asString()).isEqualTo("기존 분석 결과");
+        for (Long[] identity : new Long[][]{{702L, 7L}, {701L, 8L}}) {
+            assertThatThrownBy(() -> service.chatContext("owned-task", identity[0], identity[1]))
+                .isInstanceOfSatisfying(ApiException.class, ex -> assertThat(ex.code()).isEqualTo(ErrorCode.FORBIDDEN));
+        }
+        verifyNoInteractions(events);
+    }
+
     private TaskService service() {
         AxProperties properties = mock(AxProperties.class);
         when(properties.timeZone()).thenReturn("Asia/Seoul");
