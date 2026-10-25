@@ -1,5 +1,7 @@
 package com.axnavigator.doc;
 
+import com.axnavigator.recovery.CommandQueue;
+
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -21,12 +23,13 @@ public class DocumentUploadService {
     public static final int MAX_PAGES = 100;
     private static final byte[] PDF_SIGNATURE = "%PDF-".getBytes(StandardCharsets.US_ASCII);
     private static final Logger log = LoggerFactory.getLogger(DocumentUploadService.class);
+    private final CommandQueue commands;
     private final DocumentRepository documents;
     private final DocumentPageRepository pages;
     private final ApplicationEventPublisher events;
 
-    public DocumentUploadService(DocumentRepository documents, DocumentPageRepository pages, ApplicationEventPublisher events) {
-        this.documents = documents; this.pages = pages; this.events = events;
+    public DocumentUploadService(DocumentRepository documents, DocumentPageRepository pages, ApplicationEventPublisher events, CommandQueue commands) {
+        this.commands = commands; this.documents = documents; this.pages = pages; this.events = events;
     }
 
     @Transactional
@@ -50,7 +53,9 @@ public class DocumentUploadService {
         documents.saveAndFlush(doc);
         doc.setFileUri("docs://" + doc.getDocumentId());
         // AI 색인 호출은 DB 커밋 이후 비동기로 한다.
-        events.publishEvent(new DocumentSignals.Ingest(doc.getDocumentId(), companyId, doc.getTitle(), doc.getContentType(), content));
+        var command = new DocumentSignals.Ingest(doc.getDocumentId(), companyId, doc.getTitle(), doc.getContentType(), content);
+        commands.enqueue(command);
+        events.publishEvent(command);
         return new Uploaded(doc.getDocumentId(), doc.getStatus());
     }
 
@@ -62,6 +67,7 @@ public class DocumentUploadService {
     @Transactional
     public Summary applyIndex(Long documentId, IndexResult result) {
         Document doc = lock(documentId);
+        if (commands.enabled() && doc.getStatus() == result.status() && doc.getStatus() != DocumentStatus.UPLOADED) return summary(doc);
         if (doc.getStatus() != DocumentStatus.UPLOADED) throw ApiException.invalidState("색인 대기 중인 문서만 결과를 저장할 수 있습니다.");
         List<PageText> received = result.pages() == null ? List.of() : result.pages();
         switch (result.status()) {
