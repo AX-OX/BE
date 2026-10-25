@@ -15,6 +15,7 @@ public enum ErrorCode {
 	INVALID_STATE(HttpStatus.CONFLICT),
 	UNAUTHORIZED(HttpStatus.UNAUTHORIZED),
 	FORBIDDEN(HttpStatus.FORBIDDEN),
+	AI_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE),
 	INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR);
 
 	private final HttpStatus status;
