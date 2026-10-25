@@ -11,6 +11,7 @@ import org.springframework.stereotype.Component;
 import com.axnavigator.common.*;
 import com.axnavigator.doc.DocumentSignals;
 import com.axnavigator.task.TaskSignals;
+import com.axnavigator.chat.ChatDtos;
 import com.google.auth.oauth2.GoogleCredentials;
 import com.google.auth.oauth2.IdTokenCredentials;
 import com.google.auth.oauth2.IdTokenProvider;
@@ -22,6 +23,37 @@ public class AgentClient {
     private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
     public AgentClient(AxProperties properties, JsonSupport json) { this.properties = properties; this.json = json; }
     public boolean enabled() { return properties.agent().enabled(); }
+    /** Read-only routing/answer call. It cannot dispatch or persist an analysis. */
+    public ChatDtos.AgentReply chat(ChatDtos.AgentRequest body) {
+        if (!enabled()) throw chatUnavailable();
+        String base = properties.agent().baseUrl();
+        if (base == null || base.isBlank()) throw chatUnavailable();
+        var request = HttpRequest.newBuilder(URI.create(base.replaceAll("/+$", "") + "/chat/messages"))
+            .timeout(Duration.ofSeconds(30)).header("Content-Type", "application/json")
+            .header("X-Internal-Token", properties.internalToken())
+            .POST(HttpRequest.BodyPublishers.ofString(json.write(body)));
+        try {
+            if (properties.agent().iamAuthEnabled()) request.header("Authorization", "Bearer " + idToken(base));
+            var response = http.send(request.build(), HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+            if (response.statusCode() != 200 || response.body().length() > 40000) throw chatUnavailable();
+            var result = json.read(response.body());
+            if (result == null || !result.isObject()) throw chatUnavailable();
+            var intent = result.get("intent");
+            var message = result.get("message");
+            var analysis = result.get("analysisRequest");
+            if (intent == null || !intent.isString() || message == null || !message.isString()
+                    || (analysis != null && !analysis.isNull() && !analysis.isString())) throw chatUnavailable();
+            return new ChatDtos.AgentReply(ChatDtos.Intent.valueOf(intent.asString()), message.asString(),
+                analysis == null || analysis.isNull() ? null : analysis.asString());
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt(); throw chatUnavailable();
+        } catch (java.io.IOException | IllegalArgumentException | tools.jackson.core.JacksonException ex) {
+            throw chatUnavailable();
+        }
+    }
+    private static ApiException chatUnavailable() {
+        return new ApiException(ErrorCode.AI_UNAVAILABLE, "답변을 준비하지 못했어요. 잠시 후 다시 시도해 주세요. 새 분석은 시작하지 않았어요.");
+    }
     public void run(TaskSignals.Run command) {
         post(command.taskId(), "run", java.util.Map.of("companyId", command.companyId(), "userId", command.userId(), "requestText", command.requestText(),
             "companyDataConfirmed", command.companyDataConfirmed(), "documentIds", command.documentIds()));

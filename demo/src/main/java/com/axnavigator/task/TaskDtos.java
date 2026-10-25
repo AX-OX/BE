@@ -11,6 +11,7 @@ public final class TaskDtos {
     public record CreateRequest(@NotBlank @Schema(example = "예산 3억 원 내에서 AX 과제 3개를 추천해 주세요.") String requestText) {}
     public record Created(String taskId) {}
     public record Detail(String taskId, TaskStatus status, JsonNode result, String traceUrl) {}
+    public record ChatContext(String taskId, TaskStatus status, JsonNode result, String requestText) {}
     public record History(String taskId, TaskStatus status, String requestText, LocalDateTime createdAt, LocalDateTime completedAt) {}
     public enum Decision { APPROVE, REJECT }
     public record ApprovalRequest(@NotNull Decision decision, String reason) {}
