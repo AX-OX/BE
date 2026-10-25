@@ -8,6 +8,8 @@ import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.UUID;
 import org.springframework.stereotype.Component;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import com.axnavigator.common.*;
 import com.axnavigator.doc.DocumentSignals;
 import com.axnavigator.task.TaskSignals;
@@ -18,6 +20,7 @@ import com.google.auth.oauth2.IdTokenProvider;
 
 @Component
 public class AgentClient {
+    private static final Logger log = LoggerFactory.getLogger(AgentClient.class);
     private final AxProperties properties;
     private final JsonSupport json;
     private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
@@ -25,9 +28,10 @@ public class AgentClient {
     public boolean enabled() { return properties.agent().enabled(); }
     /** Read-only routing/answer call. It cannot dispatch or persist an analysis. */
     public ChatDtos.AgentReply chat(ChatDtos.AgentRequest body) {
-        if (!enabled()) throw chatUnavailable();
+        long started = System.nanoTime();
+        if (!enabled()) throw chatUnavailable("DISABLED", null, started, null);
         String base = properties.agent().baseUrl();
-        if (base == null || base.isBlank()) throw chatUnavailable();
+        if (base == null || base.isBlank()) throw chatUnavailable("UNCONFIGURED", null, started, null);
         var request = HttpRequest.newBuilder(URI.create(base.replaceAll("/+$", "") + "/chat/messages"))
             .timeout(Duration.ofSeconds(30)).header("Content-Type", "application/json")
             .header("X-Internal-Token", properties.internalToken())
@@ -35,23 +39,30 @@ public class AgentClient {
         try {
             if (properties.agent().iamAuthEnabled()) request.header("Authorization", "Bearer " + idToken(base));
             var response = http.send(request.build(), HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
-            if (response.statusCode() != 200 || response.body().length() > 40000) throw chatUnavailable();
+            if (response.statusCode() != 200) throw chatUnavailable("UPSTREAM_HTTP", response.statusCode(), started, null);
+            if (response.body().length() > 40000) throw chatUnavailable("INVALID_RESPONSE", 200, started, null);
             var result = json.read(response.body());
-            if (result == null || !result.isObject()) throw chatUnavailable();
+            if (result == null || !result.isObject()) throw chatUnavailable("INVALID_RESPONSE", 200, started, null);
             var intent = result.get("intent");
             var message = result.get("message");
             var analysis = result.get("analysisRequest");
             if (intent == null || !intent.isString() || message == null || !message.isString()
-                    || (analysis != null && !analysis.isNull() && !analysis.isString())) throw chatUnavailable();
+                    || (analysis != null && !analysis.isNull() && !analysis.isString())) throw chatUnavailable("INVALID_RESPONSE", 200, started, null);
             return new ChatDtos.AgentReply(ChatDtos.Intent.valueOf(intent.asString()), message.asString(),
                 analysis == null || analysis.isNull() ? null : analysis.asString());
         } catch (InterruptedException ex) {
-            Thread.currentThread().interrupt(); throw chatUnavailable();
-        } catch (java.io.IOException | IllegalArgumentException | tools.jackson.core.JacksonException ex) {
-            throw chatUnavailable();
+            Thread.currentThread().interrupt(); throw chatUnavailable("INTERRUPTED", null, started, ex.getClass().getSimpleName());
+        } catch (java.io.IOException ex) {
+            throw chatUnavailable(ex instanceof HttpTimeoutException ? "TIMEOUT" : "CONNECTION_FAILED", null, started, ex.getClass().getSimpleName());
+        } catch (IllegalArgumentException | tools.jackson.core.JacksonException ex) {
+            throw chatUnavailable("INVALID_RESPONSE", 200, started, ex.getClass().getSimpleName());
         }
     }
-    private static ApiException chatUnavailable() {
+    private static ApiException chatUnavailable(String reason, Integer status, long started, String exceptionType) {
+        // Keep the public contract unchanged. Never log headers, credentials,
+        // request/result content, upstream response bodies or exception messages.
+        log.warn("AI_CHAT_FAILED reason={} upstreamStatus={} elapsedMs={} exceptionType={}",
+            reason, status, (System.nanoTime() - started) / 1_000_000, exceptionType);
         return new ApiException(ErrorCode.AI_UNAVAILABLE, "답변을 준비하지 못했어요. 잠시 후 다시 시도해 주세요. 새 분석은 시작하지 않았어요.");
     }
     public void run(TaskSignals.Run command) {

@@ -31,6 +31,21 @@
 
 모델 실패/타임아웃/잘못된 응답은 `503 AI_UNAVAILABLE`이며 분석을 대신 실행하지 않는다. 분석 데이터가 아직 없으면 CLARIFY를 반환한다. AI 호출 동안 DB 트랜잭션을 열어두지 않는다. 기존 복구 큐의 활성화 설정·마이그레이션 요구사항은 그대로다.
 
+### 503 원인 확인
+
+사용자 응답은 기존과 동일하며, BE 로그의 `AI_CHAT_FAILED`에서 원인을 구분한다. 요청/분석 결과/토큰/업스트림 응답 본문/예외 메시지는 기록하지 않는다.
+
+| 로그 | 점검 사항 |
+| --- | --- |
+| `reason=UPSTREAM_HTTP upstreamStatus=404` | 운영 AI가 `/chat/messages`를 제공하는 버전인지, AI main 승인·배포가 끝났는지 확인 |
+| `reason=UPSTREAM_HTTP upstreamStatus=403` | BE와 AI의 내부 인증 설정 확인. 토큰을 로그에 출력하지 않음 |
+| `reason=UPSTREAM_HTTP upstreamStatus=503` | AI 내부 처리·모델 호출 실패 여부를 AI 로그와 대조 |
+| `reason=CONNECTION_FAILED` / `TIMEOUT` | 서비스 연결과 응답 시간 확인 |
+| `reason=INVALID_RESPONSE` | AI 응답 형식 확인 |
+| `reason=DISABLED` / `UNCONFIGURED` | Agent 활성화와 주소 설정 확인 |
+
+2026-10-25 장애 조사에서 FE/BE에는 대화 기능이 배포됐으나 AI는 이전 main 배포본이었고, AI의 develop → main PR이 승인 전인 상태를 확인했다. `/health`와 BE 배포 성공만으로 AI 대화 API 호환성을 보장하지 않으므로, **AI main 승인·배포 완료 후 BE → FE** 순서와 실제 대화 요청을 확인한다. 코드는 작업 브랜치에서 develop 대상으로 검토하고, 운영 반영은 develop → main PR 승인 후 진행한다.
+
 FE는 taskId가 있는 ANALYZE에서만 SSE·분석 단계·승인 카드를 사용한다. 일반 대화는 별도 메시지로 표시한다. 분석 중에도 질문할 수 있지만, 답변 요청이 진행 중인 동안 중복 메시지 전송을 막는다. 승인과 데이터 확정은 기존 전용 API/카드에서만 처리한다.
 
 ## 배포 순서
