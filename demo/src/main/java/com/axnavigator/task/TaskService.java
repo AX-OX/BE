@@ -67,8 +67,16 @@ public class TaskService {
 
     @Transactional(readOnly = true)
     public List<History> history(Long userId, Long companyId) {
-        return tasks.findByUserIdOrderByCreatedAtDesc(userId).stream().filter(t -> t.getCompanyId().equals(companyId))
+        return tasks.findByUserIdAndDeletedAtIsNullOrderByCreatedAtDesc(userId).stream().filter(t -> t.getCompanyId().equals(companyId))
             .map(t -> new History(t.getTaskId(), t.getStatus(), t.getRequestText(), t.getCreatedAt(), t.getCompletedAt())).toList();
+    }
+
+    /** 이력에서만 숨긴다. 진행 중인 작업은 Agent 콜백이 계속 들어오므로 종료 후에만 삭제할 수 있다. */
+    @Transactional
+    public void delete(String taskId, Long userId, Long companyId) {
+        AiTask task = owned(lock(taskId), userId, companyId);
+        if (!terminal(task.getStatus())) throw ApiException.invalidState("진행 중인 작업은 삭제할 수 없습니다. 작업이 완료·실패·거절된 후 다시 시도해 주세요.");
+        task.setDeletedAt(LocalDateTime.now(zone));
     }
 
     @Transactional
@@ -160,6 +168,7 @@ public class TaskService {
     public AiTask lock(String taskId) { return tasks.lockByTaskId(taskId).orElseThrow(() -> new ApiException(ErrorCode.NOT_FOUND, "작업을 찾을 수 없습니다.")); }
     public AiTask owned(AiTask task, Long userId, Long companyId) {
         if (!task.getUserId().equals(userId) || !task.getCompanyId().equals(companyId)) throw ApiException.forbidden("본인이 요청한 작업만 접근할 수 있습니다.");
+        if (task.getDeletedAt() != null) throw new ApiException(ErrorCode.NOT_FOUND, "작업을 찾을 수 없습니다.");
         return task;
     }
     /** 사용자 확정 API만 WAITING_CONFIRMATION에서 RUNNING으로 바꾸고 Agent를 재개한다. */

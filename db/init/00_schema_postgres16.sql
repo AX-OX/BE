@@ -169,6 +169,7 @@ CREATE TABLE ai_tasks (
     created_at          TIMESTAMP       NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at          TIMESTAMP       NOT NULL DEFAULT CURRENT_TIMESTAMP,
     completed_at        TIMESTAMP,
+    deleted_at          TIMESTAMP,                  -- 요청자가 이력에서 삭제한 시각. 분석 산출물 FK 때문에 행은 남긴다
     CONSTRAINT pk_ai_tasks PRIMARY KEY (task_id),
     CONSTRAINT fk_tasks_user    FOREIGN KEY (user_id)    REFERENCES users (user_id),
     CONSTRAINT fk_tasks_company FOREIGN KEY (company_id) REFERENCES companies (company_id)
