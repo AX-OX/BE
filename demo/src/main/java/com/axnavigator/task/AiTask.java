@@ -68,4 +68,8 @@ public class AiTask {
 	@Column(name = "completed_at")
 	private LocalDateTime completedAt;
 
+	/** 요청자가 이력에서 삭제한 시각. 진단·로드맵이 task_id를 참조하므로 행은 지우지 않는다. */
+	@Column(name = "deleted_at")
+	private LocalDateTime deletedAt;
+
 }

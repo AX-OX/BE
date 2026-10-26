@@ -183,6 +183,7 @@ cd demo
 | POST | `/api/ai/tasks` | `{requestText}` → 202 `{taskId}` |
 | GET | `/api/ai/tasks/{taskId}` | `{taskId, status, result, traceUrl}` |
 | GET | `/api/ai/tasks?mine=true` | `[{taskId, status, requestText, createdAt, completedAt}]`, 최신순 |
+| DELETE | `/api/ai/tasks/{taskId}` | 종료된 본인 작업을 이력에서 삭제 → 204, 진행 중이면 409 |
 | GET | `/api/ai/tasks/{taskId}/stream` | `text/event-stream` |
 | POST | `/api/ai/tasks/{taskId}/approval` | `{decision: "APPROVE" 또는 "REJECT", reason?}` → 202 |
 | GET | `/api/ai/tasks/{taskId}/extraction` | `{draftId, status: DRAFT 또는 CONFIRMED, documentIds, payload}` |

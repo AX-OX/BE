@@ -109,6 +109,15 @@ class SecuritySliceTest {
 	}
 
 	@Test
+	void taskDeletePreflightAllowsDelete() throws Exception {
+		mvc.perform(options("/api/ai/tasks/example").header("Origin", "http://app.example")
+			.header("Access-Control-Request-Method", "DELETE")
+			.header("Access-Control-Request-Headers", "Authorization"))
+			.andExpect(status().isOk())
+			.andExpect(header().string("Access-Control-Allow-Origin", "http://app.example"));
+	}
+
+	@Test
 	void corsPreflightRejectsOtherOrigin() throws Exception {
 		mvc.perform(options("/api/ai/tasks").header("Origin", "http://evil.example")
 			.header("Access-Control-Request-Method", "POST"))
