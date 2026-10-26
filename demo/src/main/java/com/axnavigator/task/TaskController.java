@@ -40,6 +40,12 @@ public class TaskController {
         if (!mine) throw ApiException.validation("본인의 작업 이력만 조회할 수 있습니다. mine=true로 요청해 주세요.");
         CurrentUser user = CurrentUser.from(jwt); return tasks.history(user.userId(), user.companyId());
     }
+    @DeleteMapping("/{taskId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @Operation(summary = "작업 이력 삭제", description = "본인 작업을 이력에서 삭제합니다. 이후 조회·SSE·대화 참조는 404입니다. DONE·FAILED·REJECTED 상태만 삭제할 수 있고 진행 중이면 409입니다. 이미 생성된 진단·로드맵은 유지됩니다.")
+    public void delete(@AuthenticationPrincipal Jwt jwt, @PathVariable String taskId) {
+        CurrentUser user = CurrentUser.from(jwt); tasks.delete(taskId, user.userId(), user.companyId());
+    }
     @GetMapping(value = "/{taskId}/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     @Operation(summary = "작업 진행 SSE 구독", description = "fetch 스트리밍에 Authorization 헤더를 전달하세요. 15초마다 : ping을 보내며 DONE·FAILED·거절 또는 45초 경과 시 정상 종료합니다. 진행 중이면 재구독하세요. 이벤트 재생은 제공하지 않으므로 재연결 직후 작업 조회로 상태를 복구하세요.")
     public ResponseEntity<SseEmitter> stream(@AuthenticationPrincipal Jwt jwt, @PathVariable String taskId) {

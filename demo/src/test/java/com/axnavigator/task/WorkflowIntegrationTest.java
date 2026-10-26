@@ -125,6 +125,11 @@ class WorkflowIntegrationTest {
         assertThat(tasks.findById(id).orElseThrow().getCompletedAt()).isNotNull();
         assertThat(request("PATCH","/internal/tasks/"+id,Map.of("status","RUNNING"),null,true).statusCode()).isEqualTo(409);
         assertThat(request("GET","/api/ai/tasks?mine=true",null,token(601),false).body()).contains(id);
+        assertThat(request("DELETE","/api/ai/tasks/"+id,null,token(602),false).statusCode()).isEqualTo(403);
+        assertThat(request("DELETE","/api/ai/tasks/"+id,null,token(601),false).statusCode()).isEqualTo(204);
+        assertThat(request("GET","/api/ai/tasks?mine=true",null,token(601),false).body()).doesNotContain(id);
+        assertThat(getTask(id,601).statusCode()).isEqualTo(404);
+        assertThat(roadmaps.findByTaskId(id)).isPresent();
     }
 
     @Test void rejectClosesStreamAndCannotBeOverwrittenByAgent() throws Exception {
@@ -161,6 +166,8 @@ class WorkflowIntegrationTest {
         assertThat(request("POST","/api/ai/tasks",Map.of("requestText"," "),token(601),false).statusCode()).isEqualTo(400);
         assertThat(request("GET","/api/ai/tasks?mine=false",null,token(601),false).statusCode()).isEqualTo(400);
         assertThat(request("GET","/api/ai/tasks/no-such-task",null,token(601),false).statusCode()).isEqualTo(404);
+        assertThat(request("DELETE","/api/ai/tasks/"+id,null,token(601),false).statusCode()).isEqualTo(409);
+        assertThat(request("DELETE","/api/ai/tasks/no-such-task",null,token(601),false).statusCode()).isEqualTo(404);
         assertThat(request("PATCH","/internal/tasks/"+id,Map.of("result",List.of()),null,true).statusCode()).isEqualTo(400);
         assertThat(request("POST","/internal/tasks/"+id+"/events",Map.of("type","TOKEN","taskId","wrong","ts",OffsetDateTime.now().toString(),"node","collect","data",Map.of()),null,true).statusCode()).isEqualTo(400);
         assertThat(request("PATCH","/internal/tasks/"+id,Map.of("status","DONE"),null,true).statusCode()).isEqualTo(409);

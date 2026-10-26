@@ -8,7 +8,7 @@ import org.springframework.data.jpa.repository.Query;
 import jakarta.persistence.LockModeType;
 
 public interface AiTaskRepository extends JpaRepository<AiTask, String> {
-    List<AiTask> findByUserIdOrderByCreatedAtDesc(Long userId);
+    List<AiTask> findByUserIdAndDeletedAtIsNullOrderByCreatedAtDesc(Long userId);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select t from AiTask t where t.taskId = :taskId")

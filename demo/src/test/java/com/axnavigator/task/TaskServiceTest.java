@@ -44,6 +44,27 @@ class TaskServiceTest {
         verifyNoInteractions(events);
     }
 
+    @Test
+    void deleteHidesOnlyFinishedOwnTasks() {
+        AiTask task = new AiTask();
+        task.setTaskId("done-task"); task.setUserId(701L); task.setCompanyId(7L); task.setStatus(TaskStatus.RUNNING);
+        when(tasks.lockByTaskId("done-task")).thenReturn(java.util.Optional.of(task));
+        when(tasks.findById("done-task")).thenReturn(java.util.Optional.of(task));
+        TaskService service = service();
+        assertThatThrownBy(() -> service.delete("done-task", 701L, 7L))
+            .isInstanceOfSatisfying(ApiException.class, ex -> assertThat(ex.code()).isEqualTo(ErrorCode.INVALID_STATE));
+        task.setStatus(TaskStatus.DONE);
+        assertThatThrownBy(() -> service.delete("done-task", 702L, 7L))
+            .isInstanceOfSatisfying(ApiException.class, ex -> assertThat(ex.code()).isEqualTo(ErrorCode.FORBIDDEN));
+        assertThat(task.getDeletedAt()).isNull();
+        service.delete("done-task", 701L, 7L);
+        assertThat(task.getDeletedAt()).isNotNull();
+        assertThatThrownBy(() -> service.detail("done-task", 701L, 7L))
+            .isInstanceOfSatisfying(ApiException.class, ex -> assertThat(ex.code()).isEqualTo(ErrorCode.NOT_FOUND));
+        assertThatThrownBy(() -> service.delete("done-task", 701L, 7L))
+            .isInstanceOfSatisfying(ApiException.class, ex -> assertThat(ex.code()).isEqualTo(ErrorCode.NOT_FOUND));
+    }
+
     private TaskService service() {
         AxProperties properties = mock(AxProperties.class);
         when(properties.timeZone()).thenReturn("Asia/Seoul");
